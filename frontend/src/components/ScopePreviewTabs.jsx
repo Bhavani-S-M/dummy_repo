@@ -145,13 +145,18 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
       // Check if it's a valid image path
       if (data.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
         const imageUrl = data.startsWith('http') ? data : `${import.meta.env.VITE_API_URL || 'http://localhost:8001'}/${data}`;
+        console.log('🖼️ Architecture image path:', data);
+        console.log('🖼️ Constructed image URL:', imageUrl);
+        console.log('🖼️ VITE_API_URL:', import.meta.env.VITE_API_URL);
         return (
           <div className="flex flex-col items-center justify-center p-4">
             <img
               src={imageUrl}
               alt="Architecture Diagram"
               className="max-w-full h-auto border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg"
+              onLoad={() => console.log('✅ Image loaded successfully')}
               onError={(e) => {
+                console.error('❌ Image failed to load:', imageUrl);
                 e.target.onerror = null;
                 e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="%236b7280" font-family="Arial" font-size="16">Image not available</text></svg>';
               }}
