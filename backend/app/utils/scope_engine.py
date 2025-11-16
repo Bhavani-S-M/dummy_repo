@@ -76,12 +76,21 @@ def _strip_code_fences(s: str) -> str:
 def _extract_json(s: str) -> dict:
     raw = _strip_code_fences(s or "")
     try:
-        return json.loads(raw.strip())
+        parsed = json.loads(raw.strip())
+        # If Ollama returns a list at root level, check if it's activities
+        if isinstance(parsed, list):
+            logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+            return {"activities": parsed}
+        return parsed if isinstance(parsed, dict) else {}
     except Exception:
         start, end = raw.find("{"), raw.rfind("}")
         if start >= 0 and end > start:
             try:
-                return json.loads(raw[start:end+1])
+                parsed = json.loads(raw[start:end+1])
+                if isinstance(parsed, list):
+                    logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+                    return {"activities": parsed}
+                return parsed if isinstance(parsed, dict) else {}
             except Exception:
                 return {}
         return {}
@@ -1446,6 +1455,12 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             return {}
 
         raw = _extract_json(raw_text)
+
+        # Safety check - ensure raw is a dict
+        if not isinstance(raw, dict):
+            logger.error(f"❌ Failed to parse Ollama response into dict. Got type: {type(raw)}")
+            logger.error(f"   Raw value: {raw}")
+            return {}
 
         # Validate that LLM actually generated content, not just structure
         if raw.get('activities'):
