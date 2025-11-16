@@ -135,8 +135,38 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
     }
   };
 
-  const renderSection = (data, isTableSection = false) => {
-    if (!data || typeof data !== 'object') {
+  const renderSection = (data, isTableSection = false, isImageSection = false) => {
+    if (!data) {
+      return <div className="text-gray-500 italic">No data available</div>;
+    }
+
+    // If this is an image section and data is a string (file path), render as image
+    if (isImageSection && typeof data === 'string') {
+      // Check if it's a valid image path
+      if (data.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
+        const imageUrl = data.startsWith('http') ? data : `${import.meta.env.VITE_API_URL || 'http://localhost:8001'}/${data}`;
+        return (
+          <div className="flex flex-col items-center justify-center p-4">
+            <img
+              src={imageUrl}
+              alt="Architecture Diagram"
+              className="max-w-full h-auto border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="%23f3f4f6"/><text x="50%" y="50%" text-anchor="middle" fill="%236b7280" font-family="Arial" font-size="16">Image not available</text></svg>';
+              }}
+            />
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {data.split('/').pop()}
+            </p>
+          </div>
+        );
+      }
+      // If it's a string but not an image path, just show it as text
+      return <div className="text-gray-600 dark:text-gray-400">{data}</div>;
+    }
+
+    if (typeof data !== 'object') {
       return <div className="text-gray-500 italic">No data available</div>;
     }
 
@@ -243,18 +273,24 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
 
   const sectionData = getSectionData();
   const isTableSection = activeTab === 'activities' || activeTab === 'resourcing';
+  const isImageSection = activeTab === 'architecture';
 
   return (
     <div className="p-6 bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-gray-700 max-h-[600px] overflow-y-auto">
-      {sectionData ? renderSection(sectionData, isTableSection) : (
+      {sectionData ? renderSection(sectionData, isTableSection, isImageSection) : (
         <div className="text-center text-gray-500 italic py-8">
           <p className="mb-2">This section has no data in the current scope</p>
           <p className="text-sm font-medium mb-2">Available fields in scope:</p>
-          <div className="text-xs bg-gray-100 dark:bg-gray-800 p-3 rounded inline-block">
+          <div className="text-xs bg-gray-100 dark:bg-gray-800 p-3 rounded inline-block text-left">
             {Object.keys(parsedDraft).map((key, idx) => (
-              <div key={idx} className="text-left">• {key}</div>
+              <div key={idx}>• {key}</div>
             ))}
           </div>
+          {activeTab === 'costing' && (
+            <p className="mt-4 text-sm text-amber-600 dark:text-amber-400">
+              💡 Tip: The AI model didn't generate a cost projection section for this scope. You may want to regenerate the scope or add costing details manually.
+            </p>
+          )}
         </div>
       )}
     </div>
