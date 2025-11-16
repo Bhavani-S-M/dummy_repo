@@ -265,11 +265,11 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
         sectionData = findField('architecture_diagram', 'architecture', 'Architecture', 'Architecture Diagram', 'Architecture diagram', 'arch_diagram', 'architecture diagram', 'system architecture', 'technical architecture');
         break;
       case 'costing':
-        sectionData = findField('costing', 'cost_projection', 'Cost Projection', 'cost_breakdown', 'pricing', 'Costing', 'costs', 'budget', 'cost projection', 'financial projection', 'cost estimate');
+        sectionData = findField('cost', 'cost_projection', 'costing', 'Cost Projection', 'cost_breakdown', 'pricing', 'Costing', 'costs', 'budget', 'cost projection', 'financial projection', 'cost estimate');
         break;
       case 'summary':
-        // Try project_summary FIRST (most specific)
-        sectionData = findField('project_summary', 'summary', 'Summary', 'Summery', 'Project Summary', 'executive_summary', 'project summary');
+        // Try project_summary FIRST (most specific), also try risks as fallback
+        sectionData = findField('project_summary', 'summary', 'risks', 'Summary', 'Summery', 'Project Summary', 'executive_summary', 'project summary');
         break;
       default:
         sectionData = null;
