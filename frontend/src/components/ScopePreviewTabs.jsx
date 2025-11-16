@@ -144,10 +144,17 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
     if (isImageSection && typeof data === 'string') {
       // Check if it's a valid image path
       if (data.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
-        const imageUrl = data.startsWith('http') ? data : `${import.meta.env.VITE_API_URL || 'http://localhost:8001'}/${data}`;
+        // Construct proper API URL for blob storage
+        // Image path format: "projects/PROJECT_ID/filename.png"
+        const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const imageUrl = data.startsWith('http')
+          ? data
+          : `${apiBaseUrl}/api/blobs/download/${data}?base=projects`;
+
         console.log('🖼️ Architecture image path:', data);
         console.log('🖼️ Constructed image URL:', imageUrl);
-        console.log('🖼️ VITE_API_URL:', import.meta.env.VITE_API_URL);
+        console.log('🖼️ API Base URL:', apiBaseUrl);
+
         return (
           <div className="flex flex-col items-center justify-center p-4">
             <img
@@ -251,16 +258,18 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
         sectionData = findField('activities', 'activities_breakdown', 'Activities Breakdown', 'Activities', 'activity_breakdown', 'activities breakdown');
         break;
       case 'resourcing':
-        sectionData = findField('resourcing', 'resourcing_plan', 'Resourcing Plan', 'Resourcing', 'resource_plan', 'resources', 'resourcing plan');
+        // Try resourcing_plan FIRST (most specific), then resourcing (might be empty)
+        sectionData = findField('resourcing_plan', 'Resourcing Plan', 'resourcing', 'Resourcing', 'resource_plan', 'resources', 'resourcing plan');
         break;
       case 'architecture':
-        sectionData = findField('architecture', 'architecture_diagram', 'Architecture', 'Architecture Diagram', 'Architecture diagram', 'arch_diagram', 'architecture diagram', 'system architecture', 'technical architecture');
+        sectionData = findField('architecture_diagram', 'architecture', 'Architecture', 'Architecture Diagram', 'Architecture diagram', 'arch_diagram', 'architecture diagram', 'system architecture', 'technical architecture');
         break;
       case 'costing':
         sectionData = findField('costing', 'cost_projection', 'Cost Projection', 'cost_breakdown', 'pricing', 'Costing', 'costs', 'budget', 'cost projection', 'financial projection', 'cost estimate');
         break;
       case 'summary':
-        sectionData = findField('summary', 'project_summary', 'Summary', 'Summery', 'Project Summary', 'executive_summary', 'project summary');
+        // Try project_summary FIRST (most specific)
+        sectionData = findField('project_summary', 'summary', 'Summary', 'Summery', 'Project Summary', 'executive_summary', 'project summary');
         break;
       default:
         sectionData = null;
