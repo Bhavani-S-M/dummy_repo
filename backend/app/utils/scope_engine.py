@@ -433,6 +433,14 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '    "key_deliverables": [string] (list of 5-7 main deliverables),\n'
         '    "success_criteria": [string] (list of 3-5 success metrics),\n'
         '    "risks_and_mitigation": [{"risk": string, "mitigation": string}] (3-4 key risks)\n'
+        "  },\n"
+        '  "cost_projection": {\n'
+        '    "currency": "USD",\n'
+        '    "breakdown": [\n'
+        '      {"category": string, "description": string, "amount": number}\n'
+        "    ],\n"
+        '    "total_cost": number,\n'
+        '    "assumptions": [string] (2-3 key cost assumptions)\n'
         "  }\n"
         "}\n\n"
         "Scheduling Rules: \n"
@@ -462,6 +470,14 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  * key_deliverables: List 5-7 concrete deliverables (e.g., 'Production-ready web application', 'API documentation', etc.)\n"
         "  * success_criteria: List 3-5 measurable success metrics (e.g., '99.9% uptime', 'Response time < 200ms', etc.)\n"
         "  * risks_and_mitigation: List 3-4 key risks with mitigation strategies (e.g., risk: 'Third-party API dependency', mitigation: 'Implement fallback mechanisms')\n"
+        "- Generate a comprehensive cost_projection with:\n"
+        "  * currency: Use 'USD' as default\n"
+        "  * breakdown: List 5-8 cost categories (e.g., 'Development Team', 'Infrastructure & Cloud Services', 'Software Licenses', 'Testing & QA', 'Project Management', 'Contingency')\n"
+        "  * Each breakdown item should have: category name, brief description, and estimated amount in USD\n"
+        "  * total_cost: Sum of all breakdown amounts\n"
+        "  * assumptions: List 2-3 key assumptions used in cost estimation (e.g., 'Assumes 5-person team', 'Based on AWS pricing', 'Includes 10% contingency')\n"
+        "  * Use reasonable industry-standard rates and cloud infrastructure costs\n"
+        "  * Base costs on the project duration, team size (from resourcing_plan), and complexity\n"
         f"{user_context}"
         f"RFP / Project Files Content:\n{rfp_text}\n\n"
         f"Knowledge Base Context (for enrichment only):\n{kb_context}\n"
