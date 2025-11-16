@@ -1434,7 +1434,8 @@ Generate activities with realistic start/end dates, proper role assignments, mea
         logger.info(f"🤖 Calling Ollama for scope generation... (prompt length: {len(prompt)} chars)")
         raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt))
         logger.info(f"📝 Ollama raw response length: {len(raw_text)} chars")
-        logger.debug(f"📝 Ollama response preview (first 500 chars): {raw_text[:500]}")
+        logger.info(f"📝 Ollama response preview (first 500 chars): {raw_text[:500]}")
+        logger.info(f"📝 Ollama response ending (last 200 chars): {raw_text[-200:]}")
 
         if not raw_text or len(raw_text.strip()) < 50:
             logger.error(f"❌ Ollama returned empty or too short response: {len(raw_text)} chars")
@@ -1459,10 +1460,12 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             if empty_fields_count > len(activities) * 0.7:  # More than 70% are garbage
                 logger.error(f"❌ LLM returned {empty_fields_count}/{len(activities)} activities with empty/invalid content!")
                 logger.error("   This means Ollama generated JSON structure but NO actual content.")
+                logger.error(f"   Sample activity (first one): {activities[0] if activities else 'None'}")
                 logger.error("   Check if:")
                 logger.error("   1. Ollama service is running: curl http://localhost:11434/api/tags")
                 logger.error("   2. Model is loaded: ollama list")
                 logger.error("   3. Sufficient memory available")
+                logger.error("   4. Response was truncated (check response ending above)")
                 return {}
 
         cleaned_scope = await clean_scope(db, raw, project=project)

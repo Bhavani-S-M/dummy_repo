@@ -102,7 +102,7 @@ async def preview_pdf_from_scope(
 
         logger.info(f"  - Activities count: {len(normalized.get('activities', []))}")
         logger.info(f"  - Resourcing plan count: {len(normalized.get('resourcing_plan', []))}")
-        logger.info(f"  - Has discount: {normalized.get('discount_percentage', 0) > 0}")
+        logger.info(f"  - Has discount: {(normalized.get('discount_percentage') or 0) > 0}")
         logger.info(f"  - Architecture diagram: {normalized.get('architecture_diagram', 'None')}")
 
         # Add timeout protection for PDF generation (60 seconds max)
