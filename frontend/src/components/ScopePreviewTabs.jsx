@@ -175,13 +175,34 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
     const findField = (...names) => {
       for (const name of names) {
         // Try exact match
-        if (parsedDraft[name]) return parsedDraft[name];
+        if (parsedDraft[name]) {
+          console.log(`✓ Found exact match for "${name}"`);
+          return parsedDraft[name];
+        }
 
         // Try case-insensitive match
         const lowerName = name.toLowerCase();
         const foundKey = Object.keys(parsedDraft).find(k => k.toLowerCase() === lowerName);
-        if (foundKey && parsedDraft[foundKey]) return parsedDraft[foundKey];
+        if (foundKey && parsedDraft[foundKey]) {
+          console.log(`✓ Found case-insensitive match: "${foundKey}" for search term "${name}"`);
+          return parsedDraft[foundKey];
+        }
       }
+
+      // Try partial match as last resort (contains the key words)
+      for (const name of names) {
+        const searchTerms = name.toLowerCase().split(/[\s_-]+/);
+        const foundKey = Object.keys(parsedDraft).find(k => {
+          const keyLower = k.toLowerCase();
+          return searchTerms.every(term => keyLower.includes(term));
+        });
+        if (foundKey && parsedDraft[foundKey]) {
+          console.log(`✓ Found partial match: "${foundKey}" for search terms "${name}"`);
+          return parsedDraft[foundKey];
+        }
+      }
+
+      console.log(`✗ No match found for any of: ${names.join(', ')}`);
       return null;
     };
 
@@ -189,22 +210,22 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
 
     switch (activeTab) {
       case 'overview':
-        sectionData = findField('overview', 'project_overview', 'Overview', 'Project Overview');
+        sectionData = findField('overview', 'project_overview', 'Overview', 'Project Overview', 'project overview');
         break;
       case 'activities':
-        sectionData = findField('activities', 'activities_breakdown', 'Activities Breakdown', 'Activities', 'activity_breakdown');
+        sectionData = findField('activities', 'activities_breakdown', 'Activities Breakdown', 'Activities', 'activity_breakdown', 'activities breakdown');
         break;
       case 'resourcing':
-        sectionData = findField('resourcing', 'resourcing_plan', 'Resourcing Plan', 'Resourcing', 'resource_plan', 'resources');
+        sectionData = findField('resourcing', 'resourcing_plan', 'Resourcing Plan', 'Resourcing', 'resource_plan', 'resources', 'resourcing plan');
         break;
       case 'architecture':
-        sectionData = findField('architecture', 'architecture_diagram', 'Architecture', 'Architecture Diagram', 'Architecture diagram', 'arch_diagram');
+        sectionData = findField('architecture', 'architecture_diagram', 'Architecture', 'Architecture Diagram', 'Architecture diagram', 'arch_diagram', 'architecture diagram', 'system architecture', 'technical architecture');
         break;
       case 'costing':
-        sectionData = findField('costing', 'cost_projection', 'Cost Projection', 'cost_breakdown', 'pricing', 'Costing', 'costs', 'budget');
+        sectionData = findField('costing', 'cost_projection', 'Cost Projection', 'cost_breakdown', 'pricing', 'Costing', 'costs', 'budget', 'cost projection', 'financial projection', 'cost estimate');
         break;
       case 'summary':
-        sectionData = findField('summary', 'project_summary', 'Summary', 'Summery', 'Project Summary', 'executive_summary');
+        sectionData = findField('summary', 'project_summary', 'Summary', 'Summery', 'Project Summary', 'executive_summary', 'project summary');
         break;
       default:
         sectionData = null;
