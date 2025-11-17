@@ -5,7 +5,7 @@ import { useRateCards } from "../contexts/RateCardContext";
 
 import { File, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "react-toastify";
-import * as XLSX from 'xlsx';
+import * as XLSX from "xlsx-js-style";
 
 const DOMAIN_COMPLIANCE_MAP = {
   fintech: ["RBI-KYC-AML","NPCI-UPI","UIDAI-Aadhaar","DPDP-2023","CERT-In-2022","IT-Rules-2021","PCI-DSS","ISO-27001","SOC-2"],
