@@ -1364,7 +1364,54 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             owner = raw_deps[0]
             raw_deps = raw_deps[1:]  # Remove owner from resources
         elif not owner:
-            owner = "Unassigned"
+            # Smart role assignment based on activity keywords
+            activity_text = (str(a.get("Activities") or a.get("Name") or a.get("activity") or "") + " " +
+                           str(a.get("Description") or a.get("description") or "")).lower()
+
+            # Map activities to roles based on keywords
+            if any(kw in activity_text for kw in ["requirement", "analysis", "use case", "stakeholder", "business"]):
+                owner = "Business Analyst"
+                raw_deps = ["Project Manager"]
+            elif any(kw in activity_text for kw in ["infrastructure", "setup", "deployment", "azure", "cloud", "devops"]):
+                owner = "DevOps Engineer"
+                raw_deps = ["Solution Architect"]
+            elif any(kw in activity_text for kw in ["data", "ingestion", "wrangling", "etl", "pipeline", "databricks"]):
+                owner = "Data Engineer"
+                raw_deps = ["Solution Architect"]
+            elif any(kw in activity_text for kw in ["database", "dba", "sql", "query", "schema"]):
+                owner = "Database Administrator"
+                raw_deps = ["Data Engineer"]
+            elif any(kw in activity_text for kw in ["monitoring", "observability", "logging", "alerting"]):
+                owner = "DevOps Engineer"
+                raw_deps = ["Data Engineer"]
+            elif any(kw in activity_text for kw in ["testing", "validation", "qa", "quality"]):
+                owner = "QA Engineer"
+                raw_deps = ["Data Engineer", "Backend Developer"]
+            elif any(kw in activity_text for kw in ["ui", "ux", "interface", "design", "frontend", "powerbi", "visualization"]):
+                owner = "UI/UX Designer"
+                raw_deps = ["Frontend Developer"]
+            elif any(kw in activity_text for kw in ["compliance", "security", "infosec", "regulatory", "audit"]):
+                owner = "Security Analyst"
+                raw_deps = ["DevOps Engineer"]
+            elif any(kw in activity_text for kw in ["documentation", "glossary", "wiki", "knowledge"]):
+                owner = "Technical Writer"
+                raw_deps = ["Business Analyst"]
+            elif any(kw in activity_text for kw in ["management", "change", "incident", "problem", "request"]):
+                owner = "Project Manager"
+                raw_deps = ["Business Analyst"]
+            elif any(kw in activity_text for kw in ["integration", "feed", "api", "service"]):
+                owner = "Backend Developer"
+                raw_deps = ["Data Engineer"]
+            elif any(kw in activity_text for kw in ["model", "semantic", "data model", "architecture"]):
+                owner = "Solution Architect"
+                raw_deps = ["Data Engineer"]
+            elif any(kw in activity_text for kw in ["access", "permission", "github", "workspace", "admin"]):
+                owner = "DevOps Engineer"
+                raw_deps = ["Project Manager"]
+            else:
+                # Default fallback
+                owner = "Project Manager"
+                raw_deps = ["Business Analyst"]
 
         # Remove owner from resources if duplicated
         raw_deps = [r for r in raw_deps if r.lower() != owner.lower()]
