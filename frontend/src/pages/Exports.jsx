@@ -153,12 +153,12 @@ export default function Exports() {
   const cachedPdfBlobRef = useRef(null);
   const lastPdfKeyRef = useRef("");
 
-  // --- Download states (progress + cancel) ---
+  // --- Download states (progress + cancel + downloaded flag) ---
   const [downloadState, setDownloadState] = useState({
-    json: { loading: false, progress: 0, controller: null },
-    excel: { loading: false, progress: 0, controller: null },
-    pdf: { loading: false, progress: 0, controller: null },
-    all: { loading: false, progress: 0, controller: null },
+    json: { loading: false, progress: 0, controller: null, downloaded: false },
+    excel: { loading: false, progress: 0, controller: null, downloaded: false },
+    pdf: { loading: false, progress: 0, controller: null, downloaded: false },
+    all: { loading: false, progress: 0, controller: null, downloaded: false },
   });
   const [regenPrompt, setRegenPrompt] = useState("");
   const [regenLoading, setRegenLoading] = useState(false);
@@ -265,13 +265,13 @@ export default function Exports() {
   const finishDownload = (key) =>
     setDownloadState((s) => ({
       ...s,
-      [key]: { ...s[key], loading: false, progress: 100, controller: null },
+      [key]: { ...s[key], loading: false, progress: 100, controller: null, downloaded: true },
     }));
 
   const resetDownload = (key) =>
     setDownloadState((s) => ({
       ...s,
-      [key]: { loading: false, progress: 0, controller: null },
+      [key]: { loading: false, progress: 0, controller: null, downloaded: false },
     }));
 
   useEffect(() => {
@@ -820,12 +820,16 @@ export default function Exports() {
           <>
             <button
               onClick={handleDownloadJson}
-              disabled={downloadState.json.loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold inline-flex items-center gap-2"
+              disabled={downloadState.json.loading || downloadState.json.downloaded}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {downloadState.json.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> JSON
+                </>
+              ) : downloadState.json.downloaded ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> JSON Downloaded
                 </>
               ) : (
                 <>
@@ -836,12 +840,16 @@ export default function Exports() {
 
             <button
               onClick={handleDownloadPdf}
-              disabled={downloadState.pdf.loading}
-              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold inline-flex items-center gap-2"
+              disabled={downloadState.pdf.loading || downloadState.pdf.downloaded}
+              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {downloadState.pdf.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> PDF
+                </>
+              ) : downloadState.pdf.downloaded ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> PDF Downloaded
                 </>
               ) : (
                 <>
@@ -852,12 +860,16 @@ export default function Exports() {
 
             <button
               onClick={handleDownloadExcel}
-              disabled={downloadState.excel.loading}
-              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold inline-flex items-center gap-2"
+              disabled={downloadState.excel.loading || downloadState.excel.downloaded}
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {downloadState.excel.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> Excel
+                </>
+              ) : downloadState.excel.downloaded ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> Excel Downloaded
                 </>
               ) : (
                 <>
@@ -868,12 +880,16 @@ export default function Exports() {
 
             <button
               onClick={handleDownloadAll}
-              disabled={downloadState.all.loading}
-              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-semibold inline-flex items-center gap-2"
+              disabled={downloadState.all.loading || downloadState.all.downloaded}
+              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {downloadState.all.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" /> ZIP
+                </>
+              ) : downloadState.all.downloaded ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> ZIP Downloaded
                 </>
               ) : (
                 <>

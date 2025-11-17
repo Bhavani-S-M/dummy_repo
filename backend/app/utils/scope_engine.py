@@ -1490,27 +1490,27 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     data["overview"] = {
         "Project Name": get_overview_field(
-            ["Project Name", "project_name", "ProjectName", "name"],
+            ["Project Name", "project_name", "ProjectName", "name", "title", "project_title"],
             getattr(project, "name", "Untitled Project")
         ),
         "Domain": get_overview_field(
-            ["Domain", "domain"],
+            ["Domain", "domain", "industry", "sector", "business_area", "area"],
             getattr(project, "domain", "")
         ),
         "Complexity": get_overview_field(
-            ["Complexity", "complexity"],
+            ["Complexity", "complexity", "project_complexity", "size"],
             getattr(project, "complexity", "")
         ),
         "Tech Stack": get_overview_field(
-            ["Tech Stack", "tech_stack", "TechStack", "technology_stack"],
+            ["Tech Stack", "tech_stack", "TechStack", "technology_stack", "technologies", "tech"],
             getattr(project, "tech_stack", "")
         ),
         "Use Cases": get_overview_field(
-            ["Use Cases", "use_cases", "UseCases"],
+            ["Use Cases", "use_cases", "UseCases", "use_case", "applications"],
             getattr(project, "use_cases", "")
         ),
         "Compliance": get_overview_field(
-            ["Compliance", "compliance"],
+            ["Compliance", "compliance", "regulations", "standards"],
             getattr(project, "compliance", "")
         ),
         "Duration": duration,
@@ -2342,10 +2342,13 @@ Return only the updated JSON.
                     discount_percentage = int(match.group(1))
                     logger.info(f"💰 Post-processing: detected {discount_percentage}% discount request")
 
-                    # Add discount to updated_scope if not already present
-                    if "discount_percentage" not in updated_scope or not updated_scope.get("discount_percentage"):
-                        updated_scope["discount_percentage"] = discount_percentage
-                        logger.info(f"  → Added discount_percentage: {discount_percentage}")
+                    # Always update discount_percentage when a new discount is requested
+                    old_discount = updated_scope.get("discount_percentage")
+                    updated_scope["discount_percentage"] = discount_percentage
+                    if old_discount and old_discount != discount_percentage:
+                        logger.info(f"  → Updated discount_percentage: {old_discount}% → {discount_percentage}%")
+                    else:
+                        logger.info(f"  → Set discount_percentage: {discount_percentage}%")
                     discount_found = True
                     break
 
