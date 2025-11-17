@@ -755,8 +755,8 @@ export default function ProjectForm({ onSubmit }) {
       <button
         type="button"
         onClick={handleGenerateQuestions}
-        disabled={questionLoading}
-        className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow font-semibold transition disabled:opacity-50"
+        disabled={questionLoading || questions.length > 0}
+        className="w-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg shadow font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {questionLoading ? (
           <>

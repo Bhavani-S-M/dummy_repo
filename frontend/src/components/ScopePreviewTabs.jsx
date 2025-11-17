@@ -140,6 +140,60 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
       return <div className="text-gray-500 italic">No data available</div>;
     }
 
+    // Special rendering for cost projection - show total_cost prominently at the top
+    if (activeTab === 'costing' && typeof data === 'object' && !Array.isArray(data)) {
+      const formatCurrency = (amount) => {
+        if (typeof amount === 'number') {
+          return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        return amount;
+      };
+
+      return (
+        <div className="space-y-6">
+          {/* Total Cost - Prominently displayed at top */}
+          {data.total_cost !== undefined && (
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-500 rounded-lg p-6 mb-6">
+              <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mb-2">
+                Total Project Cost
+              </h3>
+              <p className="text-4xl font-bold text-emerald-900 dark:text-emerald-300">
+                {formatCurrency(data.total_cost)}
+              </p>
+              {data.currency && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Currency: {data.currency}
+                </p>
+              )}
+              {data.discount_percentage > 0 && (
+                <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-2">
+                  ✓ Includes {data.discount_percentage}% discount (${formatCurrency(data.discount_amount)} off)
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Render rest of cost breakdown */}
+          {Object.entries(data).map(([key, value]) => {
+            if (value === null || value === undefined || value === '') return null;
+            // Skip total_cost, currency, discount fields as they're shown above
+            if (key === 'total_cost' || key === 'currency' || key === 'discount_percentage' || key === 'discount_amount') return null;
+
+            return (
+              <div key={key} className="border-b border-gray-200 dark:border-gray-700 pb-4 last:border-0">
+                <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                  {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </h4>
+                <div className="ml-4">
+                  {renderValue(value)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     // If this is an image section and data is a string (file path), render as image
     if (isImageSection && typeof data === 'string') {
       // Check if it's a valid image path
