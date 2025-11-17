@@ -1507,9 +1507,14 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             activities = raw.get('activities', [])
             empty_fields_count = 0
             for act in activities:
-                if (not act.get('Activities', '').strip() or
-                    not act.get('Description', '').strip() or
-                    act.get('Owner', '').lower() in ['unassigned', '']):
+                # Check for activity name in multiple possible fields
+                activity_name = (act.get('Activities') or act.get('Name') or
+                               act.get('activity') or act.get('name') or '').strip()
+                description = (act.get('Description') or act.get('description') or '').strip()
+                owner = (act.get('Owner') or act.get('owner') or '').strip().lower()
+
+                # Consider empty if no name, no description, or owner is unassigned
+                if (not activity_name or not description or owner in ['unassigned', '']):
                     empty_fields_count += 1
 
             if empty_fields_count > len(activities) * 0.7:  # More than 70% are garbage
