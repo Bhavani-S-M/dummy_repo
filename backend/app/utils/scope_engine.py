@@ -1472,18 +1472,10 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         }
         resourcing_plan.append(plan_entry)
 
-    # --- Apply discount if present ---
+    # --- NOTE: Discount is applied ONLY in cost_projection, NOT to resourcing_plan ---
+    # The resourcing_plan shows pre-discount costs
+    # The cost_projection shows post-discount total
     discount_percentage = data.get("discount_percentage", 0)
-    if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
-        discount_multiplier = 1 - (discount_percentage / 100.0)
-        logger.info(f"💰 Applying {discount_percentage}% discount (multiplier: {discount_multiplier})")
-
-        # Apply discount to all costs in resourcing_plan
-        for plan_entry in resourcing_plan:
-            original_cost = plan_entry.get("Cost", 0)
-            discounted_cost = round(original_cost * discount_multiplier, 2)
-            plan_entry["Cost"] = discounted_cost
-            logger.info(f"  → {plan_entry['Resources']}: ${original_cost} → ${discounted_cost}")
 
     # --- Overview ---
     # Handle both root-level fields and nested overview object
