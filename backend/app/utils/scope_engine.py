@@ -1538,27 +1538,39 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             getattr(project, "name", "Untitled Project")
         ),
         "Domain": get_overview_field(
-            ["Domain", "domain", "industry", "sector", "business_area", "area"],
+            ["Domain", "domain", "industry", "sector", "business_area", "area", "vertical", "field"],
             getattr(project, "domain", "")
         ),
         "Complexity": get_overview_field(
-            ["Complexity", "complexity", "project_complexity", "size"],
+            ["Complexity", "complexity", "project_complexity", "size", "complexity_level"],
             getattr(project, "complexity", "")
         ),
         "Tech Stack": get_overview_field(
-            ["Tech Stack", "tech_stack", "TechStack", "technology_stack", "technologies", "tech"],
+            ["Tech Stack", "tech_stack", "TechStack", "technology_stack", "technologies", "tech", "stack", "techStack"],
             getattr(project, "tech_stack", "")
         ),
         "Use Cases": get_overview_field(
-            ["Use Cases", "use_cases", "UseCases", "use_case", "applications"],
+            ["Use Cases", "use_cases", "UseCases", "use_case", "applications", "useCases"],
             getattr(project, "use_cases", "")
         ),
         "Compliance": get_overview_field(
             ["Compliance", "compliance", "regulations", "standards"],
             getattr(project, "compliance", "")
         ),
+        "Start Date": get_overview_field(
+            ["Start Date", "start_date", "startDate", "start", "project_start", "begin_date"],
+            ""
+        ),
+        "End Date": get_overview_field(
+            ["End Date", "end_date", "endDate", "end", "project_end", "completion_date"],
+            ""
+        ),
         "Duration": duration,
         "Generated At": datetime.now(ist).strftime("%Y-%m-%d %H:%M %Z"),
+        "Additional Notes": get_overview_field(
+            ["Additional Notes", "notes", "description", "additional_notes", "remarks", "comments"],
+            ""
+        ),
     }
     try:
         if getattr(project, "company", None):
@@ -2083,6 +2095,11 @@ Generate activities with realistic start/end dates, proper role assignments, mea
         # Step 3: Auto-save finalized_scope.json in Azure Blob + DB
         try:
             from sqlalchemy import select
+
+            # Debug: Log what's being saved
+            logger.info(f"📦 Saving finalized_scope.json with keys: {list(cleaned_scope.keys())}")
+            logger.info(f"   - architecture_diagram value: {cleaned_scope.get('architecture_diagram', 'NOT FOUND')}")
+
             result = await db.execute(
                 select(models.ProjectFile).filter(
                     models.ProjectFile.project_id == project.id,
@@ -2103,7 +2120,7 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             await azure_blob.upload_bytes(
                 json.dumps(cleaned_scope, ensure_ascii=False, indent=2).encode("utf-8"),
                 blob_name,
-                overwrite=True, 
+                overwrite=True,
             )
 
             old_file.file_path = blob_name
