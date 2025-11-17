@@ -1551,9 +1551,75 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
         data["discount_percentage"] = discount_percentage
 
-    # Preserve project_summary if it exists
-    if "project_summary" in data:
-        pass  # Already in data, no need to modify
+    # Preserve project_summary if it exists, otherwise generate a basic one
+    if "project_summary" not in data or not isinstance(data.get("project_summary"), dict):
+        logger.info("📋 Generating fallback project_summary...")
+
+        # Get project info
+        project_name = data["overview"].get("Project Name", "Untitled Project")
+        domain = data["overview"].get("Domain", "Technology")
+        tech_stack = data["overview"].get("Tech Stack", "")
+        complexity = data["overview"].get("Complexity", "Medium")
+
+        # Calculate total cost
+        total_cost = data.get("cost_projection", {}).get("total_cost", 0)
+
+        # Generate executive summary
+        exec_summary = f"This project aims to deliver a comprehensive {project_name} solution in the {domain} domain. "
+        exec_summary += f"The project is classified as {complexity} complexity and will utilize {tech_stack if tech_stack else 'modern technologies'} to achieve its objectives. "
+        exec_summary += f"The implementation will follow industry best practices and deliver measurable business value through improved efficiency and capabilities."
+
+        # Generate key deliverables from activities
+        deliverables = []
+        for idx, activity in enumerate(activities[:7], 1):  # Max 7 deliverables
+            activity_name = activity.get("Activities", f"Activity {idx}")
+            deliverables.append(f"{activity_name} implementation")
+        if not deliverables:
+            deliverables = [
+                "Production-ready software solution",
+                "Comprehensive documentation",
+                "Deployment and configuration guides",
+                "User training materials",
+                "Testing and quality assurance reports"
+            ]
+
+        # Generate success criteria
+        success_criteria = [
+            "Successful deployment to production environment",
+            "All functional requirements met and verified",
+            "Performance benchmarks achieved",
+            "User acceptance testing completed successfully",
+            "No critical or high-severity defects"
+        ]
+
+        # Generate risks and mitigation
+        risks_and_mitigation = [
+            {
+                "risk": "Technical complexity and integration challenges",
+                "mitigation": "Conduct thorough technical analysis and proof-of-concept implementations"
+            },
+            {
+                "risk": "Resource availability and skill gaps",
+                "mitigation": "Secure committed resources early and provide necessary training"
+            },
+            {
+                "risk": "Scope creep and changing requirements",
+                "mitigation": "Implement strict change control process and regular stakeholder reviews"
+            },
+            {
+                "risk": "Third-party dependencies and external factors",
+                "mitigation": "Identify dependencies early and establish contingency plans"
+            }
+        ]
+
+        data["project_summary"] = {
+            "executive_summary": exec_summary,
+            "key_deliverables": deliverables,
+            "success_criteria": success_criteria,
+            "risks_and_mitigation": risks_and_mitigation
+        }
+        logger.info("   ✓ Generated fallback project_summary")
+
 
     # Generate cost_projection from resourcing_plan if it doesn't exist or was removed
     if "cost_projection" not in data or not isinstance(data.get("cost_projection"), dict):
