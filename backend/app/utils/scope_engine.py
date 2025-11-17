@@ -436,10 +436,19 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  },\n"
         '  "cost_projection": {\n'
         '    "currency": "USD",\n'
-        '    "breakdown": [\n'
+        '    "resource_costs": [\n'
+        '      {"role": string, "rate_per_month": number, "effort_months": number, "total": number}\n'
+        "    ],\n"
+        '    "infrastructure_costs": [\n'
         '      {"category": string, "description": string, "amount": number}\n'
         "    ],\n"
-        '    "total_cost": number,\n'
+        '    "other_costs": [\n'
+        '      {"category": string, "description": string, "amount": number}\n'
+        "    ],\n"
+        '    "subtotal": number,\n'
+        '    "discount_percentage": number (if discount mentioned in RFP/questions, otherwise 0),\n'
+        '    "discount_amount": number,\n'
+        '    "total_cost": number (subtotal - discount_amount),\n'
         '    "assumptions": [string] (2-3 key cost assumptions)\n'
         "  }\n"
         "}\n\n"
@@ -470,14 +479,29 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  * key_deliverables: List 5-7 concrete deliverables (e.g., 'Production-ready web application', 'API documentation', etc.)\n"
         "  * success_criteria: List 3-5 measurable success metrics (e.g., '99.9% uptime', 'Response time < 200ms', etc.)\n"
         "  * risks_and_mitigation: List 3-4 key risks with mitigation strategies (e.g., risk: 'Third-party API dependency', mitigation: 'Implement fallback mechanisms')\n"
-        "- Generate a comprehensive cost_projection with:\n"
-        "  * currency: Use 'USD' as default\n"
-        "  * breakdown: List 5-8 cost categories (e.g., 'Development Team', 'Infrastructure & Cloud Services', 'Software Licenses', 'Testing & QA', 'Project Management', 'Contingency')\n"
-        "  * Each breakdown item should have: category name, brief description, and estimated amount in USD\n"
-        "  * total_cost: Sum of all breakdown amounts\n"
-        "  * assumptions: List 2-3 key assumptions used in cost estimation (e.g., 'Assumes 5-person team', 'Based on AWS pricing', 'Includes 10% contingency')\n"
-        "  * Use reasonable industry-standard rates and cloud infrastructure costs\n"
-        "  * Base costs on the project duration, team size (from resourcing_plan), and complexity\n"
+        "- Generate cost_projection by CALCULATING from resourcing_plan:\n"
+        "  * STEP 1 - Calculate resource_costs:\n"
+        "    - For EACH unique role in resourcing_plan, sum up their total effort_months across all activities\n"
+        "    - Apply standard monthly rates: Senior roles ($15,000-20,000/month), Mid-level ($10,000-15,000/month), Junior ($7,000-10,000/month)\n"
+        "    - For each role: total = rate_per_month × effort_months\n"
+        "    - Example: [{role: 'Backend Developer', rate_per_month: 15000, effort_months: 3.5, total: 52500}]\n"
+        "  * STEP 2 - Add infrastructure_costs:\n"
+        "    - Cloud hosting, databases, storage based on project complexity\n"
+        "    - Example: [{category: 'AWS Cloud Infrastructure', description: 'EC2, RDS, S3 for 8 months', amount: 12000}]\n"
+        "  * STEP 3 - Add other_costs:\n"
+        "    - Software licenses, tools, contingency (10% of resource costs)\n"
+        "    - Example: [{category: 'Contingency Buffer', description: '10% of resource costs', amount: 25000}]\n"
+        "  * STEP 4 - Calculate totals:\n"
+        "    - subtotal = sum of all resource_costs + infrastructure_costs + other_costs\n"
+        "    - discount_percentage: If discount mentioned in RFP or Q&A answers, use that percentage; otherwise 0\n"
+        "    - discount_amount = subtotal × (discount_percentage / 100)\n"
+        "    - total_cost = subtotal - discount_amount\n"
+        "  * assumptions: List key assumptions (e.g., 'Based on industry standard rates', 'Includes 10% contingency', 'Discount applied as per client agreement')\n"
+        "  * IMPORTANT: Cost calculation must be mathematically consistent - verify all calculations\n"
+        "- IMPORTANT: Do NOT include 'architecture_diagram' field in your JSON response\n"
+        "  * Architecture diagram is generated separately after scope generation\n"
+        "  * If you include it, leave it as null or omit it entirely\n"
+        "  * Never put descriptive text like 'Not provided' in architecture_diagram field\n"
         f"{user_context}"
         f"RFP / Project Files Content:\n{rfp_text}\n\n"
         f"Knowledge Base Context (for enrichment only):\n{kb_context}\n"
@@ -1500,6 +1524,16 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                 return {}
 
         cleaned_scope = await clean_scope(db, raw, project=project)
+
+        # Remove architecture_diagram if LLM hallucinated text instead of leaving it for generation
+        # Architecture diagram is generated separately, not by LLM
+        if "architecture_diagram" in cleaned_scope:
+            arch_val = cleaned_scope.get("architecture_diagram")
+            # If it's text/string that doesn't look like a file path, remove it
+            if isinstance(arch_val, str) and not arch_val.startswith("projects/"):
+                logger.warning(f"Removing invalid architecture_diagram value from LLM: {arch_val}")
+                cleaned_scope.pop("architecture_diagram", None)
+
         # Update project fields from generated overview (just like finalize_scope)
         overview = cleaned_scope.get("overview", {})
         if overview:
