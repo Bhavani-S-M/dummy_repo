@@ -1131,13 +1131,24 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # --- Process activities ---
     for idx, a in enumerate(data.get("activities") or [], start=1):
-        # Use flexible field name matching for owner
-        owner = (a.get("Owner") or a.get("owner") or "Unassigned").strip()
-
-        # Parse dependencies - try multiple field names
+        # Parse dependencies - try multiple field names and handle both array and string
         resources_field = (a.get("Resources") or a.get("resources") or
                           a.get("Dependencies") or a.get("dependencies") or "")
-        raw_deps = [d.strip() for d in str(resources_field).split(",") if d.strip()]
+
+        # Handle resources being an array or comma-separated string
+        if isinstance(resources_field, list):
+            raw_deps = [str(d).strip() for d in resources_field if d]
+        else:
+            raw_deps = [d.strip() for d in str(resources_field).split(",") if d.strip()]
+
+        # Use flexible field name matching for owner
+        # If no explicit owner, use first resource as owner
+        owner = (a.get("Owner") or a.get("owner") or "").strip()
+        if not owner and raw_deps:
+            owner = raw_deps[0]
+            raw_deps = raw_deps[1:]  # Remove owner from resources
+        elif not owner:
+            owner = "Unassigned"
 
         # Remove owner from resources if duplicated
         raw_deps = [r for r in raw_deps if r.lower() != owner.lower()]
@@ -1536,11 +1547,25 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                 activity_name = (act.get('Activities') or act.get('Name') or
                                act.get('activity') or act.get('name') or '').strip()
                 description = (act.get('Description') or act.get('description') or '').strip()
+
+                # Check for owner/resources in multiple formats
                 owner = (act.get('Owner') or act.get('owner') or '').strip().lower()
 
-                # Consider empty if BOTH name AND description are missing, OR owner is unassigned
-                # (Either activity_name OR description is acceptable - sometimes description IS the name)
-                if ((not activity_name and not description) or owner in ['unassigned', '']):
+                # Handle resources being an array or string
+                resources_val = act.get('resources') or act.get('Resources') or []
+                if isinstance(resources_val, list):
+                    has_resources = len(resources_val) > 0
+                else:
+                    has_resources = bool(str(resources_val).strip())
+
+                # Consider empty only if:
+                # 1. BOTH name AND description are missing
+                # OR
+                # 2. No name/description AND no owner AND no resources
+                has_content = bool(activity_name or description)
+                has_assignee = bool(owner and owner not in ['unassigned', '']) or has_resources
+
+                if not has_content or (not has_assignee and not has_content):
                     empty_fields_count += 1
 
             if empty_fields_count > len(activities) * 0.7:  # More than 70% are garbage
