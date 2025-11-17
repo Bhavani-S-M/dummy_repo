@@ -815,6 +815,60 @@ export default function Exports() {
           )}
         </button>
 
+        {/* Individual Download Buttons - Always show if there's parsed data */}
+        {parsedDraft && (
+          <>
+            <button
+              onClick={handleDownloadJson}
+              disabled={downloadState.json.loading}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold inline-flex items-center gap-2"
+            >
+              {downloadState.json.loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> JSON
+                </>
+              ) : (
+                <>
+                  <FileJson className="w-4 h-4" /> Download JSON
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadState.pdf.loading}
+              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold inline-flex items-center gap-2"
+            >
+              {downloadState.pdf.loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> PDF
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4" /> Download PDF
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleDownloadExcel}
+              disabled={downloadState.excel.loading}
+              className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold inline-flex items-center gap-2"
+            >
+              {downloadState.excel.loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Excel
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="w-4 h-4" /> Download Excel
+                </>
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Download All (ZIP) - Show after finalization */}
         {isFinalized && (
           <>
             <button

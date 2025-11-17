@@ -1308,14 +1308,47 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             logger.info(f"  → {plan_entry['Resources']}: ${original_cost} → ${discounted_cost}")
 
     # --- Overview ---
+    # Handle both root-level fields and nested overview object
     ov = data.get("overview") or {}
+
+    # Helper function to get field with multiple name variations
+    def get_overview_field(field_variations, fallback=""):
+        for field in field_variations:
+            # Check in overview object first
+            val = ov.get(field)
+            if val:
+                return _safe_str(val)
+            # Check in root data object
+            val = data.get(field)
+            if val:
+                return _safe_str(val)
+        return _safe_str(fallback)
+
     data["overview"] = {
-        "Project Name": _safe_str(ov.get("Project Name") or getattr(project, "name", "Untitled Project")),
-        "Domain": _safe_str(ov.get("Domain") or getattr(project, "domain", "")),
-        "Complexity": _safe_str(ov.get("Complexity") or getattr(project, "complexity", "")),
-        "Tech Stack": _safe_str(ov.get("Tech Stack") or getattr(project, "tech_stack", "")),
-        "Use Cases": _safe_str(ov.get("Use Cases") or getattr(project, "use_cases", "")),
-        "Compliance": _safe_str(ov.get("Compliance") or getattr(project, "compliance", "")),
+        "Project Name": get_overview_field(
+            ["Project Name", "project_name", "ProjectName", "name"],
+            getattr(project, "name", "Untitled Project")
+        ),
+        "Domain": get_overview_field(
+            ["Domain", "domain"],
+            getattr(project, "domain", "")
+        ),
+        "Complexity": get_overview_field(
+            ["Complexity", "complexity"],
+            getattr(project, "complexity", "")
+        ),
+        "Tech Stack": get_overview_field(
+            ["Tech Stack", "tech_stack", "TechStack", "technology_stack"],
+            getattr(project, "tech_stack", "")
+        ),
+        "Use Cases": get_overview_field(
+            ["Use Cases", "use_cases", "UseCases"],
+            getattr(project, "use_cases", "")
+        ),
+        "Compliance": get_overview_field(
+            ["Compliance", "compliance"],
+            getattr(project, "compliance", "")
+        ),
         "Duration": duration,
         "Generated At": datetime.now(ist).strftime("%Y-%m-%d %H:%M %Z"),
     }
@@ -1339,6 +1372,17 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     # Keep discount_percentage in output for reference
     if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
         data["discount_percentage"] = discount_percentage
+
+    # Preserve project_summary if it exists
+    if "project_summary" in data:
+        pass  # Already in data, no need to modify
+
+    # Preserve cost_projection if it exists
+    if "cost_projection" in data:
+        pass  # Already in data, no need to modify
+
+    # Preserve any other fields that the LLM generated (risks, assumptions, etc.)
+    # Just ensure we don't accidentally remove them
 
     return data
 
