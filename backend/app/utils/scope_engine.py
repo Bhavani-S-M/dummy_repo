@@ -89,16 +89,27 @@ def _extract_json(s: str) -> dict:
             logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
             return {"activities": parsed}
         return parsed if isinstance(parsed, dict) else {}
-    except Exception:
+    except Exception as e:
+        logger.warning(f"⚠️  First JSON parse attempt failed: {str(e)}")
+        logger.warning(f"   Trying to extract JSON from braces...")
         start, end = raw.find("{"), raw.rfind("}")
         if start >= 0 and end > start:
             try:
-                parsed = json.loads(raw[start:end+1])
+                extracted = raw[start:end+1]
+                logger.info(f"   Extracted JSON length: {len(extracted)} chars")
+                logger.info(f"   Extracted JSON preview (first 300 chars): {extracted[:300]}")
+                logger.info(f"   Extracted JSON ending (last 200 chars): {extracted[-200:]}")
+                parsed = json.loads(extracted)
                 if isinstance(parsed, list):
                     logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
                     return {"activities": parsed}
+                logger.info(f"✅ Successfully parsed JSON with {len(parsed)} top-level keys: {list(parsed.keys())}")
                 return parsed if isinstance(parsed, dict) else {}
-            except Exception:
+            except Exception as e2:
+                logger.error(f"❌ Second JSON parse attempt also failed: {str(e2)}")
+                logger.error(f"   Raw text length: {len(raw)} chars")
+                logger.error(f"   Raw text preview (first 300 chars): {raw[:300]}")
+                logger.error(f"   Raw text ending (last 200 chars): {raw[-200:]}")
                 return {}
         return {}
     
