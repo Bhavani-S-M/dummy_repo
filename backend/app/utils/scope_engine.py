@@ -1360,6 +1360,12 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Use flexible field name matching for owner
         # If no explicit owner, use first resource as owner
         owner = (a.get("Owner") or a.get("owner") or "").strip()
+
+        # Validate owner - reject if it's a number or single character
+        if owner and (owner.isdigit() or len(owner) <= 2):
+            logger.warning(f"Invalid owner '{owner}' detected (numeric/too short), will auto-assign role")
+            owner = ""
+
         if not owner and raw_deps:
             owner = raw_deps[0]
             raw_deps = raw_deps[1:]  # Remove owner from resources
