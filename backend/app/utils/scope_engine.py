@@ -481,10 +481,30 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  * success_criteria: List 3-5 measurable success metrics (e.g., '99.9% uptime', 'Response time < 200ms', etc.)\n"
         "  * risks_and_mitigation: List 3-4 key risks with mitigation strategies (e.g., risk: 'Third-party API dependency', mitigation: 'Implement fallback mechanisms')\n"
         "- CRITICAL: Generate cost_projection by CALCULATING from resourcing_plan:\n"
-        "  * DO NOT use Fixed Price models (1 Year, 2 Years, 3 Years) - this is WRONG\n"
-        "  * DO NOT use FTE rates section - this is WRONG\n"
-        "  * DO NOT use yearly savings - this is WRONG\n"
-        "  * MUST use the exact structure shown in the schema with resource_costs, infrastructure_costs, other_costs\n"
+        "  * ❌ WRONG - DO NOT GENERATE THIS:\n"
+        "    {\n"
+        '      "Fixed Price 1 Year": 1200000,\n'
+        '      "Fixed Price 2 Years": 2300000,\n'
+        '      "Fixed Price 3 Years": 3300000,\n'
+        '      "Yearly Savings": {"year 2": 0.15, "year 3": 0.25},\n'
+        '      "Cost Breakdown": {"development": 900000, "ongoing support": 300000},\n'
+        '      "FTE Rates": {"Senior Data Engineer": 18000, ...}\n'
+        "    }\n"
+        "  * ❌ DO NOT use Fixed Price models (1 Year, 2 Years, 3 Years)\n"
+        "  * ❌ DO NOT use FTE rates section\n"
+        "  * ❌ DO NOT use yearly savings\n"
+        "  * ❌ DO NOT use development/ongoing support breakdown\n"
+        "  * ✅ CORRECT - MUST use this exact structure:\n"
+        "    {\n"
+        '      "currency": "USD",\n'
+        '      "resource_costs": [{"role": "Backend Developer", "rate_per_month": 15000, "effort_months": 3.5, "total": 52500}],\n'
+        '      "infrastructure_costs": [{"category": "Cloud", "description": "AWS", "amount": 10000}],\n'
+        '      "other_costs": [{"category": "Contingency", "description": "Buffer", "amount": 5000}],\n'
+        '      "subtotal": 67500,\n'
+        '      "discount_percentage": 5,\n'
+        '      "discount_amount": 3375,\n'
+        '      "total_cost": 64125\n'
+        "    }\n"
         "  * STEP 1 - Calculate resource_costs:\n"
         "    - For EACH unique role in resourcing_plan, sum up their total effort_months across all activities\n"
         "    - Apply standard monthly rates: Senior roles ($15,000-20,000/month), Mid-level ($10,000-15,000/month), Junior ($7,000-10,000/month)\n"
@@ -1383,9 +1403,77 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     if "project_summary" in data:
         pass  # Already in data, no need to modify
 
-    # Preserve cost_projection if it exists
-    if "cost_projection" in data:
-        pass  # Already in data, no need to modify
+    # Generate cost_projection from resourcing_plan if it doesn't exist or was removed
+    if "cost_projection" not in data or not isinstance(data.get("cost_projection"), dict):
+        logger.info("💰 Generating cost_projection from resourcing_plan...")
+
+        # Build resource_costs from resourcing_plan
+        resource_costs = []
+        for plan_entry in resourcing_plan:
+            role = plan_entry.get("Resources", "Unknown Role")
+            rate = plan_entry.get("Rate/month", 0)
+            effort = plan_entry.get("Efforts", 0)
+            total = plan_entry.get("Cost", 0)
+
+            if effort > 0:  # Only include roles with actual effort
+                resource_costs.append({
+                    "role": role,
+                    "rate_per_month": rate,
+                    "effort_months": effort,
+                    "total": total
+                })
+
+        # Calculate infrastructure costs (10% of resource costs)
+        resource_total = sum(rc["total"] for rc in resource_costs)
+        infrastructure_amount = round(resource_total * 0.10, 2)
+        infrastructure_costs = [{
+            "category": "Cloud Infrastructure",
+            "description": f"Azure hosting, databases, and storage for {duration:.1f} months",
+            "amount": infrastructure_amount
+        }]
+
+        # Calculate other costs (5% contingency)
+        contingency_amount = round(resource_total * 0.05, 2)
+        other_costs = [{
+            "category": "Contingency Buffer",
+            "description": "5% buffer for unforeseen costs",
+            "amount": contingency_amount
+        }]
+
+        # Calculate totals
+        subtotal = resource_total + infrastructure_amount + contingency_amount
+
+        # Apply discount if present
+        disc_pct = discount_percentage if (discount_percentage and discount_percentage > 0) else 0
+        disc_amt = round(subtotal * (disc_pct / 100), 2) if disc_pct > 0 else 0
+        total_cost = subtotal - disc_amt
+
+        # Build cost_projection
+        data["cost_projection"] = {
+            "currency": "USD",
+            "resource_costs": resource_costs,
+            "infrastructure_costs": infrastructure_costs,
+            "other_costs": other_costs,
+            "subtotal": subtotal,
+            "discount_percentage": disc_pct,
+            "discount_amount": disc_amt,
+            "total_cost": total_cost,
+            "assumptions": [
+                "Based on industry standard rates for IT resources",
+                "Includes 10% for cloud infrastructure costs",
+                "Includes 5% contingency buffer for unforeseen expenses"
+            ]
+        }
+
+        if disc_pct > 0:
+            data["cost_projection"]["assumptions"].append(f"{disc_pct}% discount applied as per agreement")
+
+        logger.info(f"   ✓ Generated cost_projection with total_cost: ${total_cost:,.2f}")
+        logger.info(f"   ✓ Resource costs: ${resource_total:,.2f}")
+        logger.info(f"   ✓ Infrastructure: ${infrastructure_amount:,.2f}")
+        logger.info(f"   ✓ Contingency: ${contingency_amount:,.2f}")
+        if disc_pct > 0:
+            logger.info(f"   ✓ Discount ({disc_pct}%): -${disc_amt:,.2f}")
 
     # Preserve any other fields that the LLM generated (risks, assumptions, etc.)
     # Just ensure we don't accidentally remove them
@@ -1628,6 +1716,28 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                 logger.error("   3. Sufficient memory available")
                 logger.error("   4. Response was truncated (check response ending above)")
                 return {}
+
+        # Validate cost_projection structure - reject if it has wrong format
+        if raw.get('cost_projection'):
+            cost_proj = raw.get('cost_projection')
+            if isinstance(cost_proj, dict):
+                # Check for WRONG fields that should NOT be present
+                wrong_fields = ['Fixed Price 1 Year', 'Fixed Price 2 Years', 'Fixed Price 3 Years',
+                              'Yearly Savings', 'FTE Rates', 'Fte Rates', 'development',
+                              'ongoing support', 'ongoing_support', 'year 2', 'year 3']
+                has_wrong_format = any(field in cost_proj for field in wrong_fields)
+
+                # Check for REQUIRED fields that MUST be present
+                required_fields = ['resource_costs', 'total_cost']
+                has_correct_format = all(field in cost_proj for field in required_fields)
+
+                if has_wrong_format or not has_correct_format:
+                    logger.warning(f"❌ Cost projection has WRONG format. Removing it.")
+                    logger.warning(f"   Found wrong fields: {[f for f in wrong_fields if f in cost_proj]}")
+                    logger.warning(f"   Missing required fields: {[f for f in required_fields if f not in cost_proj]}")
+                    logger.warning(f"   Cost projection keys: {list(cost_proj.keys())}")
+                    logger.warning(f"   This will be regenerated from resourcing plan in clean_scope")
+                    raw.pop('cost_projection', None)
 
         cleaned_scope = await clean_scope(db, raw, project=project)
 
