@@ -40,7 +40,8 @@ def ollama_chat(prompt: str, model: str = llm_cfg["model"], temperature: float =
                 "prompt": prompt,
                 "temperature": temperature,
                 "stream": False,
-                "format": "json"  # Force JSON output from Ollama
+                # NOTE: Not using "format": "json" because it causes Ollama to wrap response in chat completion format
+                # The ultra-strong prompt instructions should force JSON output directly
             },
         )
         resp.raise_for_status()
