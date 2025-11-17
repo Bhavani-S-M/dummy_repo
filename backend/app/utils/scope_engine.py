@@ -80,6 +80,30 @@ def _strip_code_fences(s: str) -> str:
     m = re.search(r"```(?:json)?(.*?)```", s, flags=re.DOTALL | re.IGNORECASE)
     return m.group(1) if m else s
 
+def _repair_json(text: str) -> str:
+    """Attempt to fix common JSON syntax errors."""
+    import re
+
+    # Remove trailing commas before closing braces/brackets
+    text = re.sub(r',\s*([}\]])', r'\1', text)
+
+    # Fix missing commas between object elements (}{)
+    text = re.sub(r'}\s*{', r'},{', text)
+
+    # Fix missing commas between array elements (][)
+    text = re.sub(r']\s*\[', r'],[', text)
+
+    # Fix missing commas between object properties (common LLM error)
+    # Match: "key": "value"<newline>"nextkey": where comma is missing
+    text = re.sub(r'("\s*)\n\s*(")', r'\1,\n\2', text)
+
+    # Fix unquoted keys (capture word followed by colon, add quotes)
+    # Only match at start of line or after { or , to avoid false positives
+    text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', text)
+
+    return text
+
+
 def _extract_json(s: str) -> dict:
     raw = _strip_code_fences(s or "")
     try:
@@ -106,11 +130,25 @@ def _extract_json(s: str) -> dict:
                 logger.info(f"✅ Successfully parsed JSON with {len(parsed)} top-level keys: {list(parsed.keys())}")
                 return parsed if isinstance(parsed, dict) else {}
             except Exception as e2:
-                logger.error(f"❌ Second JSON parse attempt also failed: {str(e2)}")
-                logger.error(f"   Raw text length: {len(raw)} chars")
-                logger.error(f"   Raw text preview (first 300 chars): {raw[:300]}")
-                logger.error(f"   Raw text ending (last 200 chars): {raw[-200:]}")
-                return {}
+                logger.warning(f"⚠️  Second JSON parse attempt also failed: {str(e2)}")
+                logger.warning(f"   Attempting JSON repair...")
+                try:
+                    # Try to repair common JSON syntax errors
+                    repaired = _repair_json(extracted)
+                    logger.info(f"   Repaired JSON preview (first 300 chars): {repaired[:300]}")
+                    logger.info(f"   Repaired JSON ending (last 200 chars): {repaired[-200:]}")
+                    parsed = json.loads(repaired)
+                    if isinstance(parsed, list):
+                        logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+                        return {"activities": parsed}
+                    logger.info(f"✅ Successfully parsed repaired JSON with {len(parsed)} top-level keys: {list(parsed.keys())}")
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception as e3:
+                    logger.error(f"❌ JSON repair also failed: {str(e3)}")
+                    logger.error(f"   Raw text length: {len(raw)} chars")
+                    logger.error(f"   Raw text preview (first 300 chars): {raw[:300]}")
+                    logger.error(f"   Raw text ending (last 200 chars): {raw[-200:]}")
+                    return {}
         return {}
     
 
