@@ -1922,6 +1922,27 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                     logger.warning(f"   This will be regenerated from resourcing plan in clean_scope")
                     raw.pop('cost_projection', None)
 
+        # Validate project_summary structure - reject if it has wrong format
+        if raw.get('project_summary'):
+            proj_summ = raw.get('project_summary')
+            if isinstance(proj_summ, dict):
+                # Check for WRONG fields that should NOT be present in project_summary
+                wrong_summ_fields = ['total_cost', 'cost_breakdown', 'yearly_breakdown', 'savings', 'timeline']
+                has_wrong_summ_format = any(field in proj_summ for field in wrong_summ_fields)
+
+                # Check for REQUIRED fields that MUST be present in project_summary
+                required_summ_fields = ['executive_summary', 'key_deliverables', 'success_criteria', 'risks_and_mitigation']
+                missing_summ_fields = [f for f in required_summ_fields if f not in proj_summ]
+                has_correct_summ_format = len(missing_summ_fields) == 0
+
+                if has_wrong_summ_format or not has_correct_summ_format:
+                    logger.warning(f"❌ Project summary has WRONG format. Removing it.")
+                    logger.warning(f"   Found wrong fields: {[f for f in wrong_summ_fields if f in proj_summ]}")
+                    logger.warning(f"   Missing required fields: {missing_summ_fields}")
+                    logger.warning(f"   Project summary keys: {list(proj_summ.keys())}")
+                    logger.warning(f"   Expected keys: executive_summary, key_deliverables, success_criteria, risks_and_mitigation")
+                    raw.pop('project_summary', None)
+
         cleaned_scope = await clean_scope(db, raw, project=project)
 
         # Remove architecture_diagram if LLM hallucinated text instead of leaving it for generation
