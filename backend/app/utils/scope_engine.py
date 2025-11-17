@@ -1729,6 +1729,27 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             logger.error(f"   Raw value: {raw}")
             return {}
 
+        # Validate schema structure before processing
+        logger.info(f"📊 Validating LLM response schema...")
+        logger.info(f"   Top-level keys: {list(raw.keys())}")
+
+        # Check for wrong top-level keys
+        wrong_keys = ['datahub', 'project', 'proposal']
+        has_wrong_keys = any(key in raw for key in wrong_keys)
+        if has_wrong_keys:
+            logger.error(f"❌ LLM generated wrong schema with keys: {[k for k in wrong_keys if k in raw]}")
+            logger.error(f"   Expected keys: overview, activities, project_summary")
+            logger.error(f"   Got keys: {list(raw.keys())}")
+            return {}
+
+        # Validate 'activities' is an array, not an object
+        if 'activities' in raw:
+            if not isinstance(raw['activities'], list):
+                logger.error(f"❌ 'activities' field must be an array, not {type(raw['activities']).__name__}")
+                logger.error(f"   Got: {type(raw['activities'])}")
+                logger.error(f"   Sample: {str(raw['activities'])[:200]}")
+                return {}
+
         # Validate that LLM actually generated content, not just structure
         if raw.get('activities'):
             activities = raw.get('activities', [])
