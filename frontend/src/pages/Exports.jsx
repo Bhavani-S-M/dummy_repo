@@ -815,8 +815,8 @@ export default function Exports() {
           )}
         </button>
 
-        {/* Individual Download Buttons - Always show if there's parsed data */}
-        {parsedDraft && (
+        {/* Download Buttons - ONLY show AFTER finalization */}
+        {isFinalized && (
           <>
             <button
               onClick={handleDownloadJson}
@@ -865,12 +865,7 @@ export default function Exports() {
                 </>
               )}
             </button>
-          </>
-        )}
 
-        {/* Download All (ZIP) - Show after finalization */}
-        {isFinalized && (
-          <>
             <button
               onClick={handleDownloadAll}
               disabled={downloadState.all.loading}

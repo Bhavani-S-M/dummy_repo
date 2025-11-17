@@ -437,19 +437,20 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '  "cost_projection": {\n'
         '    "currency": "USD",\n'
         '    "resource_costs": [\n'
-        '      {"role": string, "rate_per_month": number, "effort_months": number, "total": number}\n'
+        '      {"role": "Backend Developer", "rate_per_month": 15000, "effort_months": 3.5, "total": 52500},\n'
+        '      {"role": "Frontend Developer", "rate_per_month": 14000, "effort_months": 3.0, "total": 42000}\n'
         "    ],\n"
         '    "infrastructure_costs": [\n'
-        '      {"category": string, "description": string, "amount": number}\n'
+        '      {"category": "Cloud Hosting", "description": "AWS infrastructure", "amount": 10000}\n'
         "    ],\n"
         '    "other_costs": [\n'
-        '      {"category": string, "description": string, "amount": number}\n'
+        '      {"category": "Contingency", "description": "10% buffer", "amount": 9450}\n'
         "    ],\n"
-        '    "subtotal": number,\n'
-        '    "discount_percentage": number (if discount mentioned in RFP/questions, otherwise 0),\n'
-        '    "discount_amount": number,\n'
-        '    "total_cost": number (subtotal - discount_amount),\n'
-        '    "assumptions": [string] (2-3 key cost assumptions)\n'
+        '    "subtotal": 113950,\n'
+        '    "discount_percentage": 5,\n'
+        '    "discount_amount": 5697.5,\n'
+        '    "total_cost": 108252.5,\n'
+        '    "assumptions": ["Based on industry standard rates", "Includes 10% contingency buffer"]\n'
         "  }\n"
         "}\n\n"
         "Scheduling Rules: \n"
@@ -479,25 +480,30 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  * key_deliverables: List 5-7 concrete deliverables (e.g., 'Production-ready web application', 'API documentation', etc.)\n"
         "  * success_criteria: List 3-5 measurable success metrics (e.g., '99.9% uptime', 'Response time < 200ms', etc.)\n"
         "  * risks_and_mitigation: List 3-4 key risks with mitigation strategies (e.g., risk: 'Third-party API dependency', mitigation: 'Implement fallback mechanisms')\n"
-        "- Generate cost_projection by CALCULATING from resourcing_plan:\n"
+        "- CRITICAL: Generate cost_projection by CALCULATING from resourcing_plan:\n"
+        "  * DO NOT use Fixed Price models (1 Year, 2 Years, 3 Years) - this is WRONG\n"
+        "  * DO NOT use FTE rates section - this is WRONG\n"
+        "  * DO NOT use yearly savings - this is WRONG\n"
+        "  * MUST use the exact structure shown in the schema with resource_costs, infrastructure_costs, other_costs\n"
         "  * STEP 1 - Calculate resource_costs:\n"
         "    - For EACH unique role in resourcing_plan, sum up their total effort_months across all activities\n"
         "    - Apply standard monthly rates: Senior roles ($15,000-20,000/month), Mid-level ($10,000-15,000/month), Junior ($7,000-10,000/month)\n"
         "    - For each role: total = rate_per_month × effort_months\n"
-        "    - Example: [{role: 'Backend Developer', rate_per_month: 15000, effort_months: 3.5, total: 52500}]\n"
+        "    - Example: [{\"role\": \"Backend Developer\", \"rate_per_month\": 15000, \"effort_months\": 3.5, \"total\": 52500}]\n"
         "  * STEP 2 - Add infrastructure_costs:\n"
         "    - Cloud hosting, databases, storage based on project complexity\n"
-        "    - Example: [{category: 'AWS Cloud Infrastructure', description: 'EC2, RDS, S3 for 8 months', amount: 12000}]\n"
+        "    - Example: [{\"category\": \"AWS Cloud Infrastructure\", \"description\": \"EC2, RDS, S3 for 8 months\", \"amount\": 12000}]\n"
         "  * STEP 3 - Add other_costs:\n"
         "    - Software licenses, tools, contingency (10% of resource costs)\n"
-        "    - Example: [{category: 'Contingency Buffer', description: '10% of resource costs', amount: 25000}]\n"
+        "    - Example: [{\"category\": \"Contingency Buffer\", \"description\": \"10% of resource costs\", \"amount\": 25000}]\n"
         "  * STEP 4 - Calculate totals:\n"
-        "    - subtotal = sum of all resource_costs + infrastructure_costs + other_costs\n"
+        "    - subtotal = sum of all resource_costs.total + sum of infrastructure_costs.amount + sum of other_costs.amount\n"
         "    - discount_percentage: If discount mentioned in RFP or Q&A answers, use that percentage; otherwise 0\n"
         "    - discount_amount = subtotal × (discount_percentage / 100)\n"
         "    - total_cost = subtotal - discount_amount\n"
         "  * assumptions: List key assumptions (e.g., 'Based on industry standard rates', 'Includes 10% contingency', 'Discount applied as per client agreement')\n"
         "  * IMPORTANT: Cost calculation must be mathematically consistent - verify all calculations\n"
+        "  * IMPORTANT: The total_cost field MUST show the final calculated total cost including discount\n"
         "- IMPORTANT: Do NOT include 'architecture_diagram' field in your JSON response\n"
         "  * Architecture diagram is generated separately after scope generation\n"
         "  * If you include it, leave it as null or omit it entirely\n"
