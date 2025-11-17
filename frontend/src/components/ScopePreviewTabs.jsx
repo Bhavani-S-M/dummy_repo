@@ -167,7 +167,7 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
               )}
               {data.discount_percentage > 0 && (
                 <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-2">
-                  ✓ Includes {data.discount_percentage}% discount (${formatCurrency(data.discount_amount)} off)
+                  ✓ Includes {data.discount_percentage}% discount ({formatCurrency(data.discount_amount)} off)
                 </p>
               )}
             </div>

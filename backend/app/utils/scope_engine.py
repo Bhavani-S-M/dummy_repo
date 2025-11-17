@@ -532,13 +532,13 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "Output schema:\n"
         "{\n"
         '  "overview": {\n'
-        '    "Project Name": string,\n'
-        '    "Domain": string,\n'
-        '    "Complexity": string,\n'
-        '    "Tech Stack": string,\n'
-        '    "Use Cases": string,\n'
-        '    "Compliance": string,\n'
-        '    "Duration": number\n'
+        '    "Project Name": string,  // REQUIRED: Extract from RFP title or infer from content\n'
+        '    "Domain": string,  // REQUIRED: Industry/business domain (e.g., "Healthcare", "Finance", "E-commerce", "Data Analytics")\n'
+        '    "Complexity": string,  // REQUIRED: Must be "Simple", "Medium", or "Large" based on project duration and scope\n'
+        '    "Tech Stack": string,  // REQUIRED: Technologies used (e.g., "Python, React, PostgreSQL, AWS")\n'
+        '    "Use Cases": string,  // REQUIRED: Primary use cases/applications (e.g., "Customer analytics, predictive modeling")\n'
+        '    "Compliance": string,  // Regulatory requirements if mentioned (e.g., "GDPR, SOC2"), or empty string if none\n'
+        '    "Duration": number  // Auto-calculated, do not set manually\n'
         "  },\n"
         '  "activities": [\n'
         '    {\n'
@@ -590,6 +590,19 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "- `Complexity` should be simple, medium, or large based on duration of project.\n"
         "- **Always assign at least one Resource**."
         "- Distinguish `Owner` (responsible lead role) and `Resources` (supporting roles)."
+        "- **CRITICAL: Owner and Resources must ALWAYS be job titles/IT roles, NEVER deliverables or requirements!**\n"
+        "  * ✅ CORRECT roles: Business Analyst, Data Engineer, Backend Developer, Frontend Developer, QA Engineer, DevOps Engineer, Project Manager, Solution Architect, UI/UX Designer, Database Administrator\n"
+        "  * ❌ WRONG - DO NOT USE these as Owner/Resources (these are deliverables, not roles):\n"
+        "    - 'Stakeholder alignment' (this is a DELIVERABLE, not a role!)\n"
+        "    - 'Technical feasibility assessment' (this is a DELIVERABLE, not a role!)\n"
+        "    - 'Azure environment access' (this is a REQUIREMENT, not a role!)\n"
+        "    - 'Approved architecture blueprint' (this is a DELIVERABLE, not a role!)\n"
+        "    - 'Source system documentation' (this is a DELIVERABLE, not a role!)\n"
+        "    - 'Data ingestion specifications' (this is a DELIVERABLE, not a role!)\n"
+        "    - 'Monitoring tools' (this is a TOOL/REQUIREMENT, not a role!)\n"
+        "  * IMPORTANT: If the activity is 'Requirements Gathering', Owner should be 'Business Analyst', NOT 'Requirements Document'\n"
+        "  * IMPORTANT: If the activity is 'Infrastructure Setup', Owner should be 'DevOps Engineer', NOT 'Infrastructure Access'\n"
+        "  * IMPORTANT: Always use the PERSON WHO DOES THE WORK, not what they produce!\n"
         "- `Owner` and `Resources` must be valid IT roles (e.g., Backend Developer, AI Engineer, QA Engineer, etc.)."
         "- `Owner` is always a role who manages that particular activity (not a personal name).\n"
         "- `Resources` must contain only roles which are required for that particular activity, distinct from `Owner`.\n"
@@ -600,11 +613,12 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "- If the RFP or Knowledge Base text lacks detail, infer the missing pieces logically."
         "- Include all relevant roles and activities that ensure delivery of the project scope."
         "- Keep all field names exactly as in the schema.\n"
-        "- Generate a comprehensive project_summary with:\n"
-        "  * executive_summary: 2-3 paragraph high-level overview of the project, objectives, and expected outcomes\n"
-        "  * key_deliverables: List 5-7 concrete deliverables (e.g., 'Production-ready web application', 'API documentation', etc.)\n"
-        "  * success_criteria: List 3-5 measurable success metrics (e.g., '99.9% uptime', 'Response time < 200ms', etc.)\n"
-        "  * risks_and_mitigation: List 3-4 key risks with mitigation strategies (e.g., risk: 'Third-party API dependency', mitigation: 'Implement fallback mechanisms')\n"
+        "- **REQUIRED: You MUST generate a complete project_summary object with ALL these fields:**\n"
+        "  * executive_summary (REQUIRED): 2-3 paragraph high-level overview of the project, objectives, and expected outcomes\n"
+        "  * key_deliverables (REQUIRED): Array of 5-7 concrete deliverables (e.g., ['Production-ready web application', 'API documentation', 'User training materials'])\n"
+        "  * success_criteria (REQUIRED): Array of 3-5 measurable success metrics (e.g., ['99.9% uptime', 'Response time < 200ms', 'Zero critical security vulnerabilities'])\n"
+        "  * risks_and_mitigation (REQUIRED): Array of 3-4 key risks with mitigation strategies (e.g., [{\"risk\": \"Third-party API dependency\", \"mitigation\": \"Implement fallback mechanisms\"}])\n"
+        "  * DO NOT omit project_summary - it is a REQUIRED field in the JSON output!\n"
         "- CRITICAL: Generate cost_projection by CALCULATING from resourcing_plan:\n"
         "  * ❌ WRONG - DO NOT GENERATE THIS:\n"
         "    {\n"
