@@ -1131,10 +1131,13 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # --- Process activities ---
     for idx, a in enumerate(data.get("activities") or [], start=1):
-        owner = a.get("Owner") or "Unassigned"
+        # Use flexible field name matching for owner
+        owner = (a.get("Owner") or a.get("owner") or "Unassigned").strip()
 
-        # Parse dependencies
-        raw_deps = [d.strip() for d in str(a.get("Resources") or "").split(",") if d.strip()]
+        # Parse dependencies - try multiple field names
+        resources_field = (a.get("Resources") or a.get("resources") or
+                          a.get("Dependencies") or a.get("dependencies") or "")
+        raw_deps = [d.strip() for d in str(resources_field).split(",") if d.strip()]
 
         # Remove owner from resources if duplicated
         raw_deps = [r for r in raw_deps if r.lower() != owner.lower()]
@@ -1142,8 +1145,14 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Owner always included, then other resources
         roles = [owner] + raw_deps
 
-        s = _parse_date_safe(a.get("Start Date"), today)
-        e = _parse_date_safe(a.get("End Date"), s + timedelta(days=30))
+        # Parse dates - try multiple field names
+        start_date_val = (a.get("Start Date") or a.get("start_date") or
+                         a.get("StartDate") or a.get("start"))
+        end_date_val = (a.get("End Date") or a.get("end_date") or
+                       a.get("EndDate") or a.get("end"))
+
+        s = _parse_date_safe(start_date_val, today)
+        e = _parse_date_safe(end_date_val, s + timedelta(days=30))
         if e < s:
             e = s + timedelta(days=30)
 
@@ -1157,12 +1166,27 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
                 role_month_map[role][m] = role_month_map[role].get(m, 0.0) + eff
 
         dur_days = max(1, (e - s).days)
+
+        # Use flexible field name matching for activity name and description
+        # Try various field names for the activity name
+        activity_name = (a.get("Activities") or a.get("Name") or
+                        a.get("activity") or a.get("name") or
+                        a.get("Activity") or "").strip()
+
+        # Try various field names for description
+        description = (a.get("Description") or a.get("description") or "").strip()
+
+        # If no activity name but have description, use description as the name
+        if not activity_name and description:
+            activity_name = description
+            description = ""
+
         activities.append({
             "ID": idx,
-            "Activities": _safe_str(a.get("Activities")),
-            "Description": _safe_str(a.get("Description")),
+            "Activities": activity_name,
+            "Description": description,
             "Owner": owner,
-            "Resources": ", ".join(raw_deps), 
+            "Resources": ", ".join(raw_deps),
             "Start Date": s,
             "End Date": e,
             "Effort Months": round(dur_days / 30.0, 2),
@@ -1191,6 +1215,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # Compute total active days per relative month window
     for act in activities:
+        # Activities are already normalized with proper field names by this point
         s = _parse_date_safe(act.get("Start Date"), today)
         e = _parse_date_safe(act.get("End Date"), s + timedelta(days=30))
         if e < s:
