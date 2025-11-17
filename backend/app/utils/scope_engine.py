@@ -399,6 +399,9 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
     today_str = datetime.today().date().isoformat()
 
     return (
+        "CRITICAL INSTRUCTION: You MUST respond with ONLY valid JSON. Do NOT write any explanatory text, proposals, or narrative.\n"
+        "Do NOT start with 'Okay', 'Sure', 'Here is', or any introduction.\n"
+        "Your ENTIRE response must be a single JSON object starting with { and ending with }.\n\n"
         "You are an expert AI project planner.\n"
         "Use the RFP/project text as the **primary source** \n"
         "Use questions and answers to clarify ambiguities.\n"
@@ -1666,6 +1669,16 @@ Generate activities with realistic start/end dates, proper role assignments, mea
             logger.error("   1. Ollama service is not running properly")
             logger.error("   2. The model (deepseek-r1) is not loaded")
             logger.error("   3. Out of memory or timeout")
+            return {}
+
+        # Validate that response is JSON, not prose
+        raw_text_stripped = raw_text.strip()
+        if raw_text_stripped.startswith(('Okay', 'Sure', 'Here', 'I can', 'Let me', 'I will', 'I\'ll', '*', '#', 'Proposal')):
+            logger.error(f"❌ Ollama returned prose instead of JSON!")
+            logger.error(f"   Response starts with: {raw_text_stripped[:100]}")
+            logger.error("   The LLM is writing explanatory text instead of JSON.")
+            logger.error("   This happens when the prompt is interpreted as 'write a proposal' instead of 'generate JSON'.")
+            logger.error("   Rejecting this response.")
             return {}
 
         raw = _extract_json(raw_text)
