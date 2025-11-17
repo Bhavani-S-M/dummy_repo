@@ -35,7 +35,13 @@ def ollama_chat(prompt: str, model: str = llm_cfg["model"], temperature: float =
     try:
         resp = requests.post(
             f"{llm_cfg['host']}/api/generate",
-            json={"model": model, "prompt": prompt, "temperature": temperature, "stream": False},
+            json={
+                "model": model,
+                "prompt": prompt,
+                "temperature": temperature,
+                "stream": False,
+                "format": "json"  # Force JSON output from Ollama
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -399,14 +405,24 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
     today_str = datetime.today().date().isoformat()
 
     return (
-        "CRITICAL INSTRUCTION: You MUST respond with ONLY valid JSON. Do NOT write any explanatory text, proposals, or narrative.\n"
-        "Do NOT start with 'Okay', 'Sure', 'Here is', or any introduction.\n"
-        "Your ENTIRE response must be a single JSON object starting with { and ending with }.\n\n"
+        "========================================\n"
+        "CRITICAL JSON-ONLY OUTPUT REQUIREMENT\n"
+        "========================================\n\n"
+        "YOU ARE A JSON GENERATOR, NOT A PROPOSAL WRITER.\n\n"
+        "RULES (VIOLATION WILL CAUSE REJECTION):\n"
+        "1. Your ENTIRE response must be ONLY a valid JSON object\n"
+        "2. Start with { and end with }\n"
+        "3. NO text before the JSON\n"
+        "4. NO text after the JSON\n"
+        "5. NO explanations, proposals, or narratives\n"
+        "6. NO markdown formatting (no ```json, no headers, no bullets)\n"
+        "7. DO NOT write: 'Okay', 'Sure', 'Here is', 'I can', 'Let me', 'Proposal', 'Executive Summary' as prose\n"
+        "8. DO NOT interpret this as a request to write a proposal document\n\n"
+        "TASK: Generate a JSON object following the schema below using the RFP content provided.\n\n"
         "You are an expert AI project planner.\n"
         "Use the RFP/project text as the **primary source** \n"
         "Use questions and answers to clarify ambiguities.\n"
-        "but enrich missing fields with the Knowledge Base context (if relevant).\n"
-        "Return ONLY valid JSON (no prose, no markdown, no commentary).\n\n"
+        "but enrich missing fields with the Knowledge Base context (if relevant).\n\n"
         "Output schema:\n"
         "{\n"
         '  "overview": {\n'
