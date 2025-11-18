@@ -1766,12 +1766,14 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # Smart inference for missing overview fields
     # If LLM didn't generate required fields, infer them from activities/project data
-    logger.info(f"📊 Checking overview fields before inference:")
+    logger.info(f"📊 Checking overview fields after get_overview_field() but before inference:")
+    logger.info(f"   Project Name: '{data['overview'].get('Project Name')}'")
     logger.info(f"   Domain: '{data['overview'].get('Domain')}'")
     logger.info(f"   Complexity: '{data['overview'].get('Complexity')}'")
     logger.info(f"   Tech Stack: '{data['overview'].get('Tech Stack')}'")
     logger.info(f"   Use Cases: '{data['overview'].get('Use Cases')}'")
     logger.info(f"   Compliance: '{data['overview'].get('Compliance')}'")
+    logger.info(f"   Additional Notes: '{str(data['overview'].get('Additional Notes', ''))[:100]}...'")
 
     if not data["overview"].get("Domain"):
         # Infer domain from project name or activities
@@ -1802,6 +1804,8 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         logger.info(f"   ✓ Inferred Complexity: {data['overview']['Complexity']} (duration: {duration} months, {len(activities)} activities)")
 
     tech_stack_val = data["overview"].get("Tech Stack", "")
+    logger.info(f"   Tech Stack from LLM/fallback: '{tech_stack_val}' (type: {type(tech_stack_val).__name__})")
+
     if not tech_stack_val or (isinstance(tech_stack_val, str) and tech_stack_val.strip() == ""):
         # Extract technologies from activities descriptions and project name
         logger.info(f"   Tech Stack is empty, inferring from activities...")
@@ -1809,9 +1813,11 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             "Azure Data Factory": ["azure data factory", "adf"],
             "Azure ADLS": ["adls", "azure data lake"],
             "Azure SQL DB": ["azure sql", "sql database"],
+            "Azure Fabric": ["azure fabric", "fabric"],
             "PowerBI": ["powerbi", "power bi"],
             "Databricks": ["databricks"],
             "GitHub": ["github", "git"],
+            "Azure VMs": ["azure vm", "virtual machine"],
             "Azure": ["azure"],
             "AWS": ["aws", "s3", "lambda", "ec2"],
             "Python": ["python", "django", "flask"],
@@ -1825,29 +1831,44 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             "SQL": ["sql", "t-sql", "plsql"]
         }
 
-        # Search in project name and activities
-        search_text = (
-            data["overview"].get("Project Name", "") + " " +
-            " ".join([
-                str(a.get("Activities", "")) + " " + str(a.get("Description", ""))
-                for a in activities
-            ])
-        ).lower()
+        # Search in project name, additional notes, and activities
+        project_name = data["overview"].get("Project Name", "")
+        additional_notes = data["overview"].get("Additional Notes", "")
 
-        logger.info(f"   Searching in text: {search_text[:200]}...")
+        # Get activities text - combine both Activities and Description
+        activities_text_parts = []
+        for a in activities:
+            act = str(a.get("Activities", "")).strip()
+            desc = str(a.get("Description", "")).strip()
+            if act:
+                activities_text_parts.append(act)
+            if desc:
+                activities_text_parts.append(desc)
+
+        activities_text = " ".join(activities_text_parts)
+
+        search_text = (project_name + " " + additional_notes + " " + activities_text).lower()
+
+        logger.info(f"   Project Name: '{project_name}'")
+        logger.info(f"   Additional Notes: '{additional_notes[:100] if additional_notes else 'EMPTY'}...'")
+        logger.info(f"   Activities text length: {len(activities_text)} chars")
+        logger.info(f"   Search text preview (first 300 chars): {search_text[:300]}...")
+        logger.info(f"   Search text length: {len(search_text)} chars")
 
         found_tech = []
         for tech, keywords in tech_keywords.items():
-            if any(kw in search_text for kw in keywords):
-                found_tech.append(tech)
-                logger.info(f"   Found technology: {tech}")
+            for kw in keywords:
+                if kw in search_text:
+                    found_tech.append(tech)
+                    logger.info(f"   ✓ Found '{tech}' (matched keyword: '{kw}')")
+                    break  # Only add each tech once
 
         if found_tech:
             data["overview"]["Tech Stack"] = ", ".join(found_tech[:8])  # Limit to 8 technologies
             logger.info(f"   ✓ Inferred Tech Stack: {data['overview']['Tech Stack']}")
         else:
             data["overview"]["Tech Stack"] = "Not specified"
-            logger.warning(f"   ⚠️ Could not infer Tech Stack from activities, set to 'Not specified'")
+            logger.warning(f"   ⚠️ Could not infer Tech Stack from search text, set to 'Not specified'")
 
     if not data["overview"].get("Compliance") or data["overview"].get("Compliance").strip() == "":
         # Check if compliance mentioned in activities or project name
@@ -1882,10 +1903,20 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             logger.info(f"   ✓ Set Compliance to: Not specified")
 
     if not data["overview"].get("Use Cases"):
-        # Infer use cases from activities
-        activities_summary = ", ".join([a.get("Activities", "")[:30] for a in activities[:3]])
+        # Infer use cases from activities - use Activities field, fall back to Description if Activities is too short
+        use_case_parts = []
+        for a in activities[:3]:
+            act_text = a.get("Activities", "").strip()
+            # If Activities is empty or very short, use Description instead
+            if not act_text or len(act_text) < 5:
+                act_text = a.get("Description", "").strip()
+            # Take first 40 chars
+            if act_text:
+                use_case_parts.append(act_text[:40])
+
+        activities_summary = ", ".join(use_case_parts) if use_case_parts else ""
         data["overview"]["Use Cases"] = activities_summary if activities_summary else "As specified in project requirements"
-        logger.info(f"   ✓ Inferred Use Cases: {data['overview']['Use Cases'][:60]}...")
+        logger.info(f"   ✓ Inferred Use Cases: {data['overview']['Use Cases'][:80]}...")
 
     # Calculate Start Date and End Date from activities if not provided
     if not data["overview"].get("Start Date") and activities:
