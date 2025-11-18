@@ -32,10 +32,32 @@ export default {
       },
       boxShadow: {
         soft: "0 4px 10px rgba(0,0,0,0.05)",
+        glow: "0 0 20px rgba(13, 148, 136, 0.3), 0 4px 12px rgba(0, 0, 0, 0.1)",
+        "glow-lg": "0 0 30px rgba(13, 148, 136, 0.4), 0 8px 20px rgba(0, 0, 0, 0.15)",
         dark: "0 4px 15px rgba(0,0,0,0.4)",
       },
       borderRadius: {
         xl: "1rem",
+        "2xl": "1.5rem",
+        "3xl": "2rem",
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.6s ease-out forwards',
+        'slide-in': 'slideIn 0.5s ease-out forwards',
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        slideIn: {
+          '0%': { opacity: '0', transform: 'translateX(-20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
     },
   },
