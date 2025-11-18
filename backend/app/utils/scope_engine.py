@@ -169,6 +169,22 @@ def _safe_str(val: Any) -> str:
     # If it's a list/array, join with commas
     if isinstance(val, list):
         return ", ".join(str(item).strip() for item in val if item)
+    # Check if it's a string representation of an array like "['item1', 'item2']"
+    if isinstance(val, str) and val.strip().startswith('[') and val.strip().endswith(']'):
+        try:
+            import json
+            parsed = json.loads(val.replace("'", '"'))  # Convert single quotes to double quotes for JSON
+            if isinstance(parsed, list):
+                return ", ".join(str(item).strip() for item in parsed if item)
+        except:
+            # If JSON parsing fails, try Python literal eval
+            try:
+                import ast
+                parsed = ast.literal_eval(val)
+                if isinstance(parsed, list):
+                    return ", ".join(str(item).strip() for item in parsed if item)
+            except:
+                pass  # If both fail, return as-is below
     return str(val).strip()
 
 async def get_rate_map_for_project(db: AsyncSession, project) -> Dict[str, float]:
@@ -1671,6 +1687,13 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # Smart inference for missing overview fields
     # If LLM didn't generate required fields, infer them from activities/project data
+    logger.info(f"📊 Checking overview fields before inference:")
+    logger.info(f"   Domain: '{data['overview'].get('Domain')}'")
+    logger.info(f"   Complexity: '{data['overview'].get('Complexity')}'")
+    logger.info(f"   Tech Stack: '{data['overview'].get('Tech Stack')}'")
+    logger.info(f"   Use Cases: '{data['overview'].get('Use Cases')}'")
+    logger.info(f"   Compliance: '{data['overview'].get('Compliance')}'")
+
     if not data["overview"].get("Domain"):
         # Infer domain from project name or activities
         project_text = (data["overview"].get("Project Name", "") + " " +
