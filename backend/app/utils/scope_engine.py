@@ -1735,6 +1735,25 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         data["overview"]["Use Cases"] = activities_summary if activities_summary else "As specified in project requirements"
         logger.info(f"   ✓ Inferred Use Cases: {data['overview']['Use Cases'][:60]}...")
 
+    # Calculate Start Date and End Date from activities if not provided
+    if not data["overview"].get("Start Date") and activities:
+        # Get earliest start date from activities
+        earliest_start = min(a["Start Date"] for a in activities if a.get("Start Date"))
+        if isinstance(earliest_start, str):
+            data["overview"]["Start Date"] = earliest_start
+        else:
+            data["overview"]["Start Date"] = earliest_start.strftime("%Y-%m-%d")
+        logger.info(f"   ✓ Calculated Start Date from activities: {data['overview']['Start Date']}")
+
+    if not data["overview"].get("End Date") and activities:
+        # Get latest end date from activities
+        latest_end = max(a["End Date"] for a in activities if a.get("End Date"))
+        if isinstance(latest_end, str):
+            data["overview"]["End Date"] = latest_end
+        else:
+            data["overview"]["End Date"] = latest_end.strftime("%Y-%m-%d")
+        logger.info(f"   ✓ Calculated End Date from activities: {data['overview']['End Date']}")
+
     # Add discount to overview if present
     # REMOVED: This was calculating total_cost incorrectly from resourcing_plan
     # Now moved to after cost_projection is generated (below)
