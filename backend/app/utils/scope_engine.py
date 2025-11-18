@@ -429,15 +429,24 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
             with_payload=True
         )
 
+        logger.info(f"🔍 Searching knowledge base (Qdrant) - found {len(results)} results")
+
         hits = []
         for r in results:
             payload = r.payload or {}
+            file_name = payload.get("file_name", "unknown")
+            chunk_index = payload.get("chunk_index", "?")
+            score = r.score
+
+            # Log each result with details
+            logger.info(f"   📄 {file_name} (chunk {chunk_index}): similarity {score:.3f}")
+
             hits.append({
                 "id": payload.get("chunk_id", str(r.id)),
                 "parent_id": payload.get("parent_id"),
                 "content": payload.get("chunk", ""),
                 "title": payload.get("title", ""),
-                "score": r.score,
+                "score": score,
             })
 
         # Group by parent_id for consistency
@@ -450,10 +459,15 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
                 "score": h["score"],
             })
 
-        return [
+        result_list = [
             {"parent_id": pid, "chunks": chs}
             for pid, chs in grouped.items()
         ]
+
+        if not result_list:
+            logger.info("⚠️ No documents found in knowledge base with sufficient similarity")
+
+        return result_list
 
     except Exception as e:
         logger.warning(f"RAG retrieval (Qdrant) failed: {e}")
@@ -953,6 +967,11 @@ async def generate_project_questions(db: AsyncSession, project) -> dict:
     # ---------- Retrieve Knowledge Base ----------
     kb_results = _rag_retrieve(rfp_text or project.name or project.domain)
     kb_chunks = [ch["content"] for group in kb_results for ch in group["chunks"]] if kb_results else []
+
+    if kb_chunks:
+        logger.info(f"✅ Using {len(kb_chunks)} KB chunks for question generation")
+    else:
+        logger.info(f"⚠️ No KB chunks found - generating questions from RFP only")
 
     # ---------- Build prompt ----------
     prompt = _build_questionnaire_prompt(rfp_text, kb_chunks, project)
@@ -2247,8 +2266,15 @@ Generate activities with realistic start/end dates, proper role assignments, mea
         if stop:
             break
 
+    kb_token_count = used_tokens - len(rfp_tokens)
+
+    if kb_token_count > 0:
+        logger.info(f"✅ Using {len(kb_chunks)} KB chunks ({kb_token_count} tokens) for context")
+    else:
+        logger.info(f"⚠️ No KB chunks used - generating scope from LLM knowledge only")
+
     logger.info(
-        f"Final RFP tokens: {len(rfp_tokens)}, KB tokens: {used_tokens - len(rfp_tokens)}, Total: {used_tokens}/{max_total_tokens}"
+        f"Final RFP tokens: {len(rfp_tokens)}, KB tokens: {kb_token_count}, Total: {used_tokens}/{max_total_tokens}"
     )
 
     # ---------- Load questions.json (if exists) and build Q&A context ----------
