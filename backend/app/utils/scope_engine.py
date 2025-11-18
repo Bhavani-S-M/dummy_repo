@@ -1396,7 +1396,13 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         if not owner and raw_deps:
             owner = raw_deps[0]
             raw_deps = raw_deps[1:]  # Remove owner from resources
-        elif not owner:
+
+            # Validate owner again after taking from raw_deps - it might also be invalid
+            if owner and (owner.isdigit() or len(owner) <= 2 or any(kw in owner.lower() for kw in ["previous", "all activities", "all "])):
+                logger.warning(f"Invalid owner '{owner}' extracted from resources (numeric/invalid), will auto-assign role")
+                owner = ""  # Don't use this invalid value
+
+        if not owner:
             # Smart role assignment based on activity keywords
             activity_text = (str(a.get("Activities") or a.get("Name") or a.get("activity") or "") + " " +
                            str(a.get("Description") or a.get("description") or "")).lower()
