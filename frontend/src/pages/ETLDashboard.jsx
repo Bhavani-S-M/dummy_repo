@@ -27,10 +27,12 @@ export default function ETLDashboard() {
     loadProcessingJobs,
     loadKBDocuments,
     loadStats,
+    resetFailedDocuments,
   } = useETL();
 
   const [activeTab, setActiveTab] = useState("stats");
   const [scanLoading, setScanLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [processingId, setProcessingId] = useState(null);
   const [adminComment, setAdminComment] = useState("");
   const [selectedPending, setSelectedPending] = useState(null);
@@ -92,6 +94,20 @@ export default function ETLDashboard() {
     if (activeTab === "pending") loadPendingUpdates();
     if (activeTab === "jobs") loadProcessingJobs();
     if (activeTab === "documents") loadKBDocuments();
+  };
+
+  const handleResetFailed = async () => {
+    if (!confirm("This will reset all failed documents for reprocessing. Make sure Ollama is running! Continue?")) return;
+
+    setResetLoading(true);
+    try {
+      const result = await resetFailedDocuments();
+      alert(`Success! ${result.message}\n\nNow click "Trigger ETL Scan" to reprocess the documents.`);
+    } catch (err) {
+      alert(`Failed to reset documents: ${err.message}`);
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -341,8 +357,33 @@ export default function ETLDashboard() {
 
         {/* Processing Jobs Tab */}
         {activeTab === "jobs" && (
-          <div className="overflow-x-auto">
-            <table className="professional-table w-full">
+          <div className="space-y-4">
+            {/* Failed Documents Alert and Reset Button */}
+            {processingJobs.some(j => j.status === "failed") && (
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-orange-900 dark:text-orange-100">Failed Documents Detected</p>
+                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                      {processingJobs.filter(j => j.status === "failed").length} document(s) failed processing.
+                      Make sure Ollama is running, then click "Reset & Retry" to reprocess them.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleResetFailed}
+                  disabled={resetLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  <RefreshCcw className={`w-4 h-4 ${resetLoading ? "animate-spin" : ""}`} />
+                  {resetLoading ? "Resetting..." : "Reset & Retry"}
+                </button>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="professional-table w-full">
               <thead>
                 <tr>
                   <th>Document</th>
@@ -396,6 +437,7 @@ export default function ETLDashboard() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

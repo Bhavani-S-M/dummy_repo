@@ -368,3 +368,57 @@ async def get_etl_stats(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
+
+
+@router.post("/reset-failed-documents")
+async def reset_failed_documents(
+    db: AsyncSession = Depends(get_async_session),
+    current_user: models.User = Depends(get_current_superuser)
+):
+    """
+    Reset failed documents to allow reprocessing.
+
+    This marks all documents with failed processing jobs as not vectorized,
+    so they will be reprocessed on the next ETL scan.
+
+    Only superusers can reset failed documents.
+    """
+    try:
+        # Find all failed processing jobs
+        failed_jobs_result = await db.execute(
+            select(models.DocumentProcessingJob).where(
+                models.DocumentProcessingJob.status == "failed"
+            )
+        )
+        failed_jobs = failed_jobs_result.scalars().all()
+
+        reset_count = 0
+        for job in failed_jobs:
+            # Get the document
+            doc_result = await db.execute(
+                select(models.KnowledgeBaseDocument).where(
+                    models.KnowledgeBaseDocument.id == job.document_id
+                )
+            )
+            doc = doc_result.scalar_one_or_none()
+
+            if doc:
+                # Mark as not vectorized so it will be reprocessed
+                doc.is_vectorized = False
+                doc.vectorized_at = None
+                doc.vector_count = 0
+                doc.qdrant_point_ids = None
+                reset_count += 1
+
+        await db.commit()
+
+        return {
+            "status": "success",
+            "message": f"Reset {reset_count} failed documents for reprocessing",
+            "reset_count": reset_count
+        }
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to reset documents: {str(e)}")
+

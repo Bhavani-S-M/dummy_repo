@@ -129,6 +129,25 @@ export const ETLProvider = ({ children }) => {
     }
   }, []);
 
+  // Reset failed documents
+  const resetFailedDocuments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await etlApi.resetFailedDocuments();
+      await loadStats(); // Refresh stats
+      await loadProcessingJobs(); // Refresh jobs
+      await loadKBDocuments(); // Refresh documents
+      return data;
+    } catch (err) {
+      console.error("Failed to reset failed documents:", err);
+      setError(err.response?.data?.detail || "Failed to reset failed documents");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [loadStats, loadProcessingJobs, loadKBDocuments]);
+
   const value = {
     // State
     pendingUpdates,
@@ -146,6 +165,7 @@ export const ETLProvider = ({ children }) => {
     loadProcessingJobs,
     loadKBDocuments,
     loadStats,
+    resetFailedDocuments,
   };
 
   return <ETLContext.Provider value={value}>{children}</ETLContext.Provider>;

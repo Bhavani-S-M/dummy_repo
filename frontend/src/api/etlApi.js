@@ -62,6 +62,11 @@ const etlApi = {
    * Get ETL pipeline statistics
    */
   getStats: () => api.get("/etl/stats"),
+
+  /**
+   * Reset failed documents to allow reprocessing
+   */
+  resetFailedDocuments: () => api.post("/etl/reset-failed-documents"),
 };
 
 export default etlApi;
