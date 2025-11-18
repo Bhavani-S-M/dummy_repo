@@ -116,8 +116,16 @@ class ETLPipeline:
         if existing_doc:
             # Check if file has changed
             if existing_doc.file_hash == file_hash:
-                logger.debug(f"⏭️  Skipping unchanged document: {file_name}")
-                return
+                # File hasn't changed, but check if it needs reprocessing
+                if existing_doc.is_vectorized:
+                    logger.debug(f"⏭️  Skipping unchanged document: {file_name}")
+                    return
+                else:
+                    # Document exists but not vectorized (failed or reset) - reprocess it
+                    logger.info(f"🔄 Reprocessing failed/reset document: {file_name}")
+                    existing_doc.last_checked = datetime.now(timezone.utc)
+                    doc = existing_doc
+                    stats["updated"] += 1
             else:
                 logger.info(f"🔄 Document changed: {file_name}")
                 # Update existing record
@@ -126,6 +134,7 @@ class ETLPipeline:
                 existing_doc.is_vectorized = False
                 existing_doc.last_checked = datetime.now(timezone.utc)
                 doc = existing_doc
+                stats["updated"] += 1
         else:
             # Create new document record
             doc = models.KnowledgeBaseDocument(
