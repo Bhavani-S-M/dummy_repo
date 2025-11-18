@@ -16,6 +16,10 @@ logging.basicConfig(
     format='%(levelname)s: %(message)s'
 )
 
+# Reduce Azure SDK logging noise
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.storage.blob").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # ---------- App Init ----------
