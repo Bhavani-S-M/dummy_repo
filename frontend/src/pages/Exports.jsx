@@ -797,9 +797,9 @@ export default function Exports() {
         <button
           type="button"
           onClick={handleFinalize}
-          disabled={!parsedDraft || finalizing}
+          disabled={!parsedDraft || finalizing || isFinalized}
           className={`px-4 py-2 rounded-lg text-white flex items-center gap-2 ${
-            finalizing
+            finalizing || isFinalized
               ? "bg-emerald-400 cursor-not-allowed"
               : "bg-emerald-600 hover:bg-emerald-700"
           }`}
@@ -807,6 +807,10 @@ export default function Exports() {
           {finalizing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" /> Finalizing…
+            </>
+          ) : isFinalized ? (
+            <>
+              <CheckCircle2 className="w-4 h-4" /> Scope Finalized
             </>
           ) : (
             <>

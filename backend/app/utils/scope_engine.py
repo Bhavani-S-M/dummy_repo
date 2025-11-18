@@ -163,7 +163,13 @@ def _parse_date_safe(val: Any, fallback: datetime = None) -> datetime:
         return fallback
 
 def _safe_str(val: Any) -> str:
-    return str(val).strip() if val is not None else ""
+    """Convert value to string, handling arrays by joining them."""
+    if val is None:
+        return ""
+    # If it's a list/array, join with commas
+    if isinstance(val, list):
+        return ", ".join(str(item).strip() for item in val if item)
+    return str(val).strip()
 
 async def get_rate_map_for_project(db: AsyncSession, project) -> Dict[str, float]:
     """
@@ -581,10 +587,10 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '  "activities": [\n'
         '    {\n'
         '      "ID": int,\n'
-        '      "Activities": string,\n'
-        '      "Description": string | null,\n'
-        '      "Owner": string | null,\n'
-        '      "Resources": string | null,\n'
+        '      "Activities": string,  // REQUIRED: Activity name/title\n'
+        '      "Description": string,  // REQUIRED: Detailed description of what this activity involves (must not be empty)\n'
+        '      "Owner": string,  // REQUIRED: Primary role responsible (e.g., "Project Manager", "Data Engineer")\n'
+        '      "Resources": string,  // Supporting roles (comma-separated, e.g., "Business Analyst, QA Engineer") or empty if none\n'
         '      "Start Date": "yyyy-mm-dd",\n'
         '      "End Date": "yyyy-mm-dd",\n'
         '      "Effort Months": number\n'
@@ -1633,6 +1639,17 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             data["overview"]["Currency"] = "USD"
     except Exception:
         data["overview"]["Currency"] = "USD"
+
+    # Calculate Start Date and End Date from activities if not provided
+    if not data["overview"]["Start Date"] and activities:
+        earliest_start = min(act["Start Date"] for act in activities if act.get("Start Date"))
+        data["overview"]["Start Date"] = earliest_start.strftime("%Y-%m-%d")
+        logger.info(f"   ✓ Calculated Start Date from activities: {data['overview']['Start Date']}")
+
+    if not data["overview"]["End Date"] and activities:
+        latest_end = max(act["End Date"] for act in activities if act.get("End Date"))
+        data["overview"]["End Date"] = latest_end.strftime("%Y-%m-%d")
+        logger.info(f"   ✓ Calculated End Date from activities: {data['overview']['End Date']}")
 
     # Add discount to overview if present
     # REMOVED: This was calculating total_cost incorrectly from resourcing_plan

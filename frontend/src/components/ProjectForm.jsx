@@ -718,14 +718,18 @@ export default function ProjectForm({ onSubmit }) {
 
       {/* File Upload */}
       <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        className="md:col-span-2 flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary hover:bg-gray-50 dark:hover:bg-dark-surface/40 transition"
+        onDrop={scopeLoading ? undefined : handleDrop}
+        onDragOver={scopeLoading ? undefined : handleDragOver}
+        className={`md:col-span-2 flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 rounded-lg transition ${
+          scopeLoading
+            ? "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800"
+            : "hover:border-primary hover:bg-gray-50 dark:hover:bg-dark-surface/40"
+        }`}
       >
-        <input type="file" multiple onChange={handleFileChange} className="hidden" id="fileUpload" />
-        <label htmlFor="fileUpload" className="flex flex-col items-center gap-2 cursor-pointer">
+        <input type="file" multiple onChange={handleFileChange} className="hidden" id="fileUpload" disabled={scopeLoading} />
+        <label htmlFor="fileUpload" className={`flex flex-col items-center gap-2 ${scopeLoading ? "cursor-not-allowed" : "cursor-pointer"}`}>
           <Upload className="w-6 h-6 text-gray-500" />
-          <span className="text-gray-500">Drag & Drop files here</span>
+          <span className="text-gray-500">{scopeLoading ? "Upload disabled during scope generation" : "Drag & Drop files here"}</span>
         </label>
       </div>
       {/* File List */}
@@ -811,14 +815,19 @@ export default function ProjectForm({ onSubmit }) {
                 {downloadingQuestions ? "Downloading..." : "Download Questions (Excel)"}
               </button>
 
-              <label className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow font-semibold transition cursor-pointer">
+              <label className={`flex items-center gap-2 text-white px-4 py-2 rounded-lg shadow font-semibold transition ${
+                scopeLoading
+                  ? "bg-blue-400 cursor-not-allowed opacity-50"
+                  : "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+              }`}>
                 <Upload className="w-4 h-4" />
-                Upload Client Responses
+                {scopeLoading ? "Upload Disabled" : "Upload Client Responses"}
                 <input
                   type="file"
                   accept=".xlsx,.xls,.pdf"
                   onChange={handleUploadClientResponses}
                   className="hidden"
+                  disabled={scopeLoading}
                 />
               </label>
             </div>
