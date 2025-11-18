@@ -18,8 +18,8 @@ export default function Layout() {
           onToggleSidebar={() => setMobileOpen(!mobileOpen)}
           isSidebarOpen={mobileOpen}
         />
-        <main className="flex-1 p-8 overflow-y-auto bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-dark-background dark:via-dark-surface dark:to-dark-background">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 p-8 overflow-y-auto relative">
+          <div className="max-w-7xl mx-auto relative z-10">
             <Outlet /> {/* renders nested routes */}
           </div>
         </main>

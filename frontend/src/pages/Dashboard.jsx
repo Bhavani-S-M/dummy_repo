@@ -69,9 +69,9 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div className="relative">
-        <div className="relative bg-white/60 dark:bg-dark-surface/60 backdrop-blur-xl rounded-3xl p-8 shadow-glow border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
+        <div className="relative bg-white/95 dark:bg-dark-surface/95 backdrop-blur-2xl rounded-3xl p-8 shadow-soft border border-gray-100/80 dark:border-dark-muted/40 overflow-hidden">
           {/* Background decoration */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl -z-10"></div>
+          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-primary/8 via-accent/4 to-transparent rounded-full blur-3xl"></div>
 
           <div className="relative z-10">
             <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent mb-2">
@@ -89,20 +89,29 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="group relative bg-white/95 dark:bg-dark-surface/95 backdrop-blur-2xl rounded-3xl p-8 shadow-soft hover:shadow-glow transition-all duration-400 border border-gray-100/80 dark:border-dark-muted/40 overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-48 h-48 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-full blur-3xl group-hover:scale-110 transition-transform duration-700"></div>
           <div className="relative z-10">
-            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Total Projects</p>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">{projects.length}</p>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-primary to-accent animate-pulse-slow"></div>
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Total Projects</p>
+            </div>
+            <p className="text-6xl font-extrabold bg-gradient-to-br from-primary via-accent to-primary bg-clip-text text-transparent mb-3">{projects.length}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-semibold">
+              <span className="px-2 py-1 rounded-full bg-primary/10 text-primary">All time</span>
+            </div>
           </div>
         </div>
 
-        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-accent/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+        <div className="group relative bg-white/95 dark:bg-dark-surface/95 backdrop-blur-2xl rounded-3xl p-8 shadow-soft hover:shadow-glow transition-all duration-400 border border-gray-100/80 dark:border-dark-muted/40 overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-48 h-48 bg-gradient-to-br from-accent/10 via-secondary/5 to-transparent rounded-full blur-3xl group-hover:scale-110 transition-transform duration-700"></div>
           <div className="relative z-10">
-            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">This Week</p>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-accent to-secondary animate-pulse-slow"></div>
+              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">This Week</p>
+            </div>
+            <p className="text-6xl font-extrabold bg-gradient-to-br from-accent via-secondary to-accent bg-clip-text text-transparent mb-3">
               {projects.filter(p => {
                 const created = new Date(p.created_at);
                 const weekAgo = new Date();
@@ -110,14 +119,9 @@ export default function Dashboard() {
                 return created >= weekAgo;
               }).length}
             </p>
-          </div>
-        </div>
-
-        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-secondary/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
-          <div className="relative z-10">
-            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Active</p>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-secondary to-primary bg-clip-text text-transparent">{projects.length}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 font-semibold">
+              <span className="px-2 py-1 rounded-full bg-accent/10 text-accent">Last 7 days</span>
+            </div>
           </div>
         </div>
       </div>
@@ -125,7 +129,7 @@ export default function Dashboard() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Complexity Bar */}
-        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-gray-200/50 dark:border-dark-muted/50 hover:shadow-glow transition-all duration-300">
+        <div className="bg-white/95 dark:bg-dark-surface/95 backdrop-blur-2xl p-8 rounded-3xl shadow-soft border border-gray-100/80 dark:border-dark-muted/40 hover:shadow-glow transition-all duration-400">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
               <Folder className="w-5 h-5 text-white" />
@@ -159,7 +163,7 @@ export default function Dashboard() {
         </div>
 
         {/* Daily Line */}
-        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-gray-200/50 dark:border-dark-muted/50 hover:shadow-glow transition-all duration-300">
+        <div className="bg-white/95 dark:bg-dark-surface/95 backdrop-blur-2xl p-8 rounded-3xl shadow-soft border border-gray-100/80 dark:border-dark-muted/40 hover:shadow-glow transition-all duration-400">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center shadow-lg">
               <History className="w-5 h-5 text-white" />
