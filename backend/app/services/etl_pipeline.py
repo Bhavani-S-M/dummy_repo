@@ -128,9 +128,9 @@ class ETLPipeline:
                                 models.PendingKBUpdate.new_document_id == existing_doc.id,
                                 models.PendingKBUpdate.status == "pending"
                             )
-                        )
+                        ).limit(1)
                     )
-                    has_pending_approval = pending_check.scalar_one_or_none() is not None
+                    has_pending_approval = pending_check.first() is not None
 
                     if has_pending_approval:
                         logger.debug(f"⏭️  Skipping document with pending approval: {file_name}")
