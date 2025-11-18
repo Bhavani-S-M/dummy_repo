@@ -168,12 +168,24 @@ def _parse_date_safe(val: Any, fallback: datetime = None, min_date: datetime = N
         return fallback
 
 def _safe_str(val: Any) -> str:
-    """Convert value to string, handling arrays by joining them."""
+    """Convert value to string, handling arrays and dictionaries by joining them."""
     if val is None:
         return ""
+
+    # If it's a dictionary, extract all values and flatten them
+    if isinstance(val, dict):
+        all_values = []
+        for v in val.values():
+            if isinstance(v, list):
+                all_values.extend(v)
+            elif v:
+                all_values.append(str(v))
+        return ", ".join(str(item).strip() for item in all_values if item)
+
     # If it's a list/array, join with commas
     if isinstance(val, list):
         return ", ".join(str(item).strip() for item in val if item)
+
     # Check if it's a string representation of an array like "['item1', 'item2']"
     if isinstance(val, str) and val.strip().startswith('[') and val.strip().endswith(']'):
         try:
@@ -190,6 +202,23 @@ def _safe_str(val: Any) -> str:
                     return ", ".join(str(item).strip() for item in parsed if item)
             except:
                 pass  # If both fail, return as-is below
+
+    # Check if it's a string representation of a dict like "{'key': ['val1', 'val2']}"
+    if isinstance(val, str) and val.strip().startswith('{') and val.strip().endswith('}'):
+        try:
+            import ast
+            parsed = ast.literal_eval(val)
+            if isinstance(parsed, dict):
+                all_values = []
+                for v in parsed.values():
+                    if isinstance(v, list):
+                        all_values.extend(v)
+                    elif v:
+                        all_values.append(str(v))
+                return ", ".join(str(item).strip() for item in all_values if item)
+        except:
+            pass  # If parsing fails, return as-is below
+
     return str(val).strip()
 
 async def get_rate_map_for_project(db: AsyncSession, project) -> Dict[str, float]:
@@ -2332,26 +2361,46 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                     logger.warning(f"   This will be regenerated from resourcing plan in clean_scope")
                     raw.pop('cost_projection', None)
 
-        # Validate project_summary structure - reject if it has wrong format
+        # Validate project_summary structure - try to repair if it has wrong field names
         if raw.get('project_summary'):
             proj_summ = raw.get('project_summary')
             if isinstance(proj_summ, dict):
                 # Check for WRONG fields that should NOT be present in project_summary
-                wrong_summ_fields = ['total_cost', 'cost_breakdown', 'yearly_breakdown', 'savings', 'timeline']
+                wrong_summ_fields = ['total_cost', 'cost_breakdown', 'yearly_breakdown', 'savings']
                 has_wrong_summ_format = any(field in proj_summ for field in wrong_summ_fields)
 
-                # Check for REQUIRED fields that MUST be present in project_summary
+                # Try to map alternative field names to expected names
+                field_mappings = {
+                    'executive_summary': ['executive_summary', 'summary', 'overview', 'description', 'scope'],
+                    'key_deliverables': ['key_deliverables', 'deliverables', 'outputs', 'results'],
+                    'success_criteria': ['success_criteria', 'success_metrics', 'successMetrics', 'kpis', 'metrics'],
+                    'risks_and_mitigation': ['risks_and_mitigation', 'risks', 'risk_mitigation', 'challenges']
+                }
+
+                # Attempt to repair by mapping alternative names to expected names
+                repaired_summ = {}
+                for expected_name, alternatives in field_mappings.items():
+                    for alt_name in alternatives:
+                        if alt_name in proj_summ:
+                            repaired_summ[expected_name] = proj_summ[alt_name]
+                            break
+
+                # Check if we have all required fields after repair
                 required_summ_fields = ['executive_summary', 'key_deliverables', 'success_criteria', 'risks_and_mitigation']
-                missing_summ_fields = [f for f in required_summ_fields if f not in proj_summ]
+                missing_summ_fields = [f for f in required_summ_fields if f not in repaired_summ]
                 has_correct_summ_format = len(missing_summ_fields) == 0
 
                 if has_wrong_summ_format or not has_correct_summ_format:
-                    logger.warning(f"❌ Project summary has WRONG format. Removing it.")
+                    logger.warning(f"❌ Project summary has wrong or missing fields. Removing it.")
                     logger.warning(f"   Found wrong fields: {[f for f in wrong_summ_fields if f in proj_summ]}")
                     logger.warning(f"   Missing required fields: {missing_summ_fields}")
                     logger.warning(f"   Project summary keys: {list(proj_summ.keys())}")
                     logger.warning(f"   Expected keys: executive_summary, key_deliverables, success_criteria, risks_and_mitigation")
                     raw.pop('project_summary', None)
+                else:
+                    # Use repaired summary
+                    raw['project_summary'] = repaired_summ
+                    logger.info(f"✓ Project summary repaired/validated successfully")
 
         cleaned_scope = await clean_scope(db, raw, project=project)
 
