@@ -1494,38 +1494,44 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Log for debugging
         logger.info(f"Activity {idx}: Name='{activity_name[:50] if activity_name else 'EMPTY'}...', Desc='{description[:50] if description else 'EMPTY'}'")
 
-        # REPAIR: LLM often swaps Activities and Description fields
-        # If Description is empty/very short but Activities looks like a description (long text), swap them
+        # REPAIR: LLM often puts full description in Activities field, leaving Description empty
+        # If Description is empty/very short but Activities is long, move Activities text to Description
         description_is_empty = not description or len(description) < 10
-        if description_is_empty and activity_name:
-            # Check if activity_name looks like a description (> 60 chars or has multiple sentences)
-            if len(activity_name) > 60 or '.' in activity_name or ',' in activity_name:
-                logger.warning(f"⚠️  LLM put description in Activities field. Swapping fields.")
-                logger.warning(f"   Activities (wrong): {activity_name[:80]}...")
-                # Try to extract the actual activity name from Owner field (LLM often puts it there)
-                # Use original_owner before validation rejected it
-                potential_activity = original_owner
-                if potential_activity and not any(role_keyword in potential_activity.lower()
-                    for role_keyword in ["engineer", "developer", "analyst", "manager", "designer",
-                                        "architect", "admin", "qa", "writer", "devops", "security"]):
-                    # Owner looks like an activity name, not a role - swap it
-                    description = activity_name
-                    activity_name = potential_activity
-                    owner = ""  # Will be auto-assigned based on activity keywords
-                    logger.warning(f"   ✓ Fixed: Activities={activity_name[:50]}, Description={description[:50]}...")
-                else:
-                    # Owner is a role name, so generate short activity name from description
-                    description = activity_name
-                    # Generate a short activity name from the long description
-                    words = activity_name.split()
-                    activity_name = ' '.join(words[:5]) if len(words) > 5 else activity_name
-                    logger.warning(f"   ✓ Generated short name: '{activity_name}'")
-                    logger.warning(f"   ✓ Moved to Description: '{description[:80]}...'")
+        if description_is_empty and activity_name and len(activity_name) > 50:
+            # Activities field has long text (likely a description) - move it to Description
+            logger.warning(f"⚠️  Activities field is too long ({len(activity_name)} chars) - moving to Description")
+            logger.warning(f"   Original Activities: {activity_name[:80]}...")
 
-        # If no activity name but have description, use description as the name
-        if not activity_name and description:
-            activity_name = description
-            description = ""
+            # Save the long text as description
+            description = activity_name
+
+            # Try to generate a short activity name
+            # First, check if original Owner had activity name (before validation)
+            potential_activity = original_owner
+            if potential_activity and len(potential_activity) > 2 and not any(role_keyword in potential_activity.lower()
+                for role_keyword in ["engineer", "developer", "analyst", "manager", "designer",
+                                    "architect", "admin", "qa", "writer", "devops", "security"]):
+                # Original Owner looks like an activity name - use it
+                activity_name = potential_activity
+                owner = ""  # Clear owner to trigger auto-assignment
+                logger.warning(f"   ✓ Using activity name from Owner field: '{activity_name}'")
+            else:
+                # Generate short activity name from first 5 words of description
+                words = description.split()
+                activity_name = ' '.join(words[:5]) if len(words) >= 5 else ' '.join(words[:3])
+                logger.warning(f"   ✓ Generated short activity name: '{activity_name}'")
+
+            logger.warning(f"   ✓ Description set to: '{description[:80]}...'")
+
+        # Final safety check: if activity name is still too long, shorten it
+        if activity_name and len(activity_name) > 60:
+            logger.warning(f"⚠️  Activity name still too long ({len(activity_name)} chars), shortening...")
+            if not description:
+                # Move to description if description is still empty
+                description = activity_name
+            words = activity_name.split()
+            activity_name = ' '.join(words[:5]) if len(words) >= 5 else ' '.join(words[:3])
+            logger.warning(f"   ✓ Shortened to: '{activity_name}'")
 
         activities.append({
             "ID": idx,
