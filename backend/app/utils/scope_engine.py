@@ -1603,6 +1603,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     # --- Overview ---
     # Handle both root-level fields and nested overview object
     ov = data.get("overview") or {}
+    logger.info(f"📋 LLM generated overview keys: {list(ov.keys())}")
 
     # Helper function to get field with multiple name variations
     def get_overview_field(field_variations, fallback=""):
@@ -1615,6 +1616,9 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             val = data.get(field)
             if val:
                 return _safe_str(val)
+        # If not found in LLM output, use fallback
+        if fallback:
+            logger.debug(f"   Using fallback for {field_variations[0]}: {str(fallback)[:50]}")
         return _safe_str(fallback)
 
     data["overview"] = {
@@ -1664,6 +1668,72 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             data["overview"]["Currency"] = "USD"
     except Exception:
         data["overview"]["Currency"] = "USD"
+
+    # Smart inference for missing overview fields
+    # If LLM didn't generate required fields, infer them from activities/project data
+    if not data["overview"].get("Domain"):
+        # Infer domain from project name or activities
+        project_text = (data["overview"].get("Project Name", "") + " " +
+                       " ".join([a.get("Activities", "") for a in activities[:3]])).lower()
+        if any(kw in project_text for kw in ["data", "analytics", "bi", "warehouse", "databricks", "etl"]):
+            data["overview"]["Domain"] = "Data & Analytics"
+        elif any(kw in project_text for kw in ["finance", "banking", "payment"]):
+            data["overview"]["Domain"] = "Finance"
+        elif any(kw in project_text for kw in ["health", "medical", "patient"]):
+            data["overview"]["Domain"] = "Healthcare"
+        elif any(kw in project_text for kw in ["retail", "commerce", "shop"]):
+            data["overview"]["Domain"] = "Retail & E-commerce"
+        elif any(kw in project_text for kw in ["cloud", "infrastructure", "devops"]):
+            data["overview"]["Domain"] = "Cloud & Infrastructure"
+        else:
+            data["overview"]["Domain"] = "Technology"
+        logger.info(f"   ✓ Inferred Domain: {data['overview']['Domain']}")
+
+    if not data["overview"].get("Complexity"):
+        # Infer complexity from duration and number of activities
+        if duration <= 3 and len(activities) <= 10:
+            data["overview"]["Complexity"] = "Simple"
+        elif duration <= 6 and len(activities) <= 20:
+            data["overview"]["Complexity"] = "Medium"
+        else:
+            data["overview"]["Complexity"] = "Large"
+        logger.info(f"   ✓ Inferred Complexity: {data['overview']['Complexity']} (duration: {duration} months, {len(activities)} activities)")
+
+    if not data["overview"].get("Tech Stack"):
+        # Extract technologies from activities descriptions
+        tech_keywords = {
+            "Azure": ["azure", "adls", "adf", "databricks"],
+            "AWS": ["aws", "s3", "lambda", "ec2"],
+            "Python": ["python", "django", "flask"],
+            "React": ["react", "reactjs", "next.js"],
+            "Node.js": ["node", "nodejs", "express"],
+            "PostgreSQL": ["postgres", "postgresql"],
+            "MongoDB": ["mongo", "mongodb"],
+            "Docker": ["docker", "container"],
+            "Kubernetes": ["k8s", "kubernetes"],
+            "PowerBI": ["powerbi", "power bi"],
+            "Tableau": ["tableau"],
+            "SQL": ["sql", "database"]
+        }
+        activities_text = " ".join([
+            str(a.get("Activities", "")) + " " + str(a.get("Description", ""))
+            for a in activities
+        ]).lower()
+
+        found_tech = []
+        for tech, keywords in tech_keywords.items():
+            if any(kw in activities_text for kw in keywords):
+                found_tech.append(tech)
+
+        if found_tech:
+            data["overview"]["Tech Stack"] = ", ".join(found_tech[:6])  # Limit to 6 technologies
+            logger.info(f"   ✓ Inferred Tech Stack: {data['overview']['Tech Stack']}")
+
+    if not data["overview"].get("Use Cases"):
+        # Infer use cases from activities
+        activities_summary = ", ".join([a.get("Activities", "")[:30] for a in activities[:3]])
+        data["overview"]["Use Cases"] = activities_summary if activities_summary else "As specified in project requirements"
+        logger.info(f"   ✓ Inferred Use Cases: {data['overview']['Use Cases'][:60]}...")
 
     # Add discount to overview if present
     # REMOVED: This was calculating total_cost incorrectly from resourcing_plan
