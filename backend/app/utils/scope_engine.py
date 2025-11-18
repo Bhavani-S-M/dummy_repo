@@ -1640,17 +1640,6 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     except Exception:
         data["overview"]["Currency"] = "USD"
 
-    # Calculate Start Date and End Date from activities if not provided
-    if not data["overview"]["Start Date"] and activities:
-        earliest_start = min(act["Start Date"] for act in activities if act.get("Start Date"))
-        data["overview"]["Start Date"] = earliest_start.strftime("%Y-%m-%d")
-        logger.info(f"   ✓ Calculated Start Date from activities: {data['overview']['Start Date']}")
-
-    if not data["overview"]["End Date"] and activities:
-        latest_end = max(act["End Date"] for act in activities if act.get("End Date"))
-        data["overview"]["End Date"] = latest_end.strftime("%Y-%m-%d")
-        logger.info(f"   ✓ Calculated End Date from activities: {data['overview']['End Date']}")
-
     # Add discount to overview if present
     # REMOVED: This was calculating total_cost incorrectly from resourcing_plan
     # Now moved to after cost_projection is generated (below)
