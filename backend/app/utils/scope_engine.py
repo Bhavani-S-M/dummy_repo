@@ -1753,8 +1753,10 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             data["overview"]["Complexity"] = "Large"
         logger.info(f"   ✓ Inferred Complexity: {data['overview']['Complexity']} (duration: {duration} months, {len(activities)} activities)")
 
-    if not data["overview"].get("Tech Stack") or data["overview"].get("Tech Stack").strip() == "":
+    tech_stack_val = data["overview"].get("Tech Stack", "")
+    if not tech_stack_val or (isinstance(tech_stack_val, str) and tech_stack_val.strip() == ""):
         # Extract technologies from activities descriptions and project name
+        logger.info(f"   Tech Stack is empty, inferring from activities...")
         tech_keywords = {
             "Azure Data Factory": ["azure data factory", "adf"],
             "Azure ADLS": ["adls", "azure data lake"],
@@ -1784,16 +1786,20 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             ])
         ).lower()
 
+        logger.info(f"   Searching in text: {search_text[:200]}...")
+
         found_tech = []
         for tech, keywords in tech_keywords.items():
             if any(kw in search_text for kw in keywords):
                 found_tech.append(tech)
+                logger.info(f"   Found technology: {tech}")
 
         if found_tech:
             data["overview"]["Tech Stack"] = ", ".join(found_tech[:8])  # Limit to 8 technologies
             logger.info(f"   ✓ Inferred Tech Stack: {data['overview']['Tech Stack']}")
         else:
-            logger.warning(f"   ⚠️ Could not infer Tech Stack from activities")
+            data["overview"]["Tech Stack"] = "Not specified"
+            logger.warning(f"   ⚠️ Could not infer Tech Stack from activities, set to 'Not specified'")
 
     if not data["overview"].get("Compliance") or data["overview"].get("Compliance").strip() == "":
         # Check if compliance mentioned in activities or project name
