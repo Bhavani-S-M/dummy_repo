@@ -1522,7 +1522,26 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         start_dates.append(s)
         end_dates.append(e)
 
-        # --- Sort activities ---
+    # Check if all activities have the same dates (LLM error) and stagger them
+    if activities and len(set(start_dates)) == 1 and len(set(end_dates)) == 1:
+        logger.warning(f"⚠️  All activities have same dates - LLM error. Staggering activities sequentially...")
+        base_start = start_dates[0]
+        start_dates = []
+        end_dates = []
+        for idx, activity in enumerate(activities):
+            # Stagger each activity with slight overlap
+            activity_duration_days = 30  # Default 1 month per activity
+            overlap_days = 10  # 10 days overlap
+
+            activity["Start Date"] = base_start + timedelta(days=idx * (activity_duration_days - overlap_days))
+            activity["End Date"] = activity["Start Date"] + timedelta(days=activity_duration_days)
+
+            start_dates.append(activity["Start Date"])
+            end_dates.append(activity["End Date"])
+
+            logger.info(f"   → Activity {idx+1}: {activity['Start Date'].strftime('%Y-%m-%d')} to {activity['End Date'].strftime('%Y-%m-%d')}")
+
+    # --- Sort activities ---
     activities.sort(key=lambda x: x["Start Date"])
     for idx, a in enumerate(activities, start=1):
         a["ID"] = idx
@@ -1722,10 +1741,16 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             data["overview"]["Complexity"] = "Large"
         logger.info(f"   ✓ Inferred Complexity: {data['overview']['Complexity']} (duration: {duration} months, {len(activities)} activities)")
 
-    if not data["overview"].get("Tech Stack"):
-        # Extract technologies from activities descriptions
+    if not data["overview"].get("Tech Stack") or data["overview"].get("Tech Stack").strip() == "":
+        # Extract technologies from activities descriptions and project name
         tech_keywords = {
-            "Azure": ["azure", "adls", "adf", "databricks"],
+            "Azure Data Factory": ["azure data factory", "adf"],
+            "Azure ADLS": ["adls", "azure data lake"],
+            "Azure SQL DB": ["azure sql", "sql database"],
+            "PowerBI": ["powerbi", "power bi"],
+            "Databricks": ["databricks"],
+            "GitHub": ["github", "git"],
+            "Azure": ["azure"],
             "AWS": ["aws", "s3", "lambda", "ec2"],
             "Python": ["python", "django", "flask"],
             "React": ["react", "reactjs", "next.js"],
@@ -1734,23 +1759,61 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             "MongoDB": ["mongo", "mongodb"],
             "Docker": ["docker", "container"],
             "Kubernetes": ["k8s", "kubernetes"],
-            "PowerBI": ["powerbi", "power bi"],
             "Tableau": ["tableau"],
-            "SQL": ["sql", "database"]
+            "SQL": ["sql", "t-sql", "plsql"]
         }
-        activities_text = " ".join([
-            str(a.get("Activities", "")) + " " + str(a.get("Description", ""))
-            for a in activities
-        ]).lower()
+
+        # Search in project name and activities
+        search_text = (
+            data["overview"].get("Project Name", "") + " " +
+            " ".join([
+                str(a.get("Activities", "")) + " " + str(a.get("Description", ""))
+                for a in activities
+            ])
+        ).lower()
 
         found_tech = []
         for tech, keywords in tech_keywords.items():
-            if any(kw in activities_text for kw in keywords):
+            if any(kw in search_text for kw in keywords):
                 found_tech.append(tech)
 
         if found_tech:
-            data["overview"]["Tech Stack"] = ", ".join(found_tech[:6])  # Limit to 6 technologies
+            data["overview"]["Tech Stack"] = ", ".join(found_tech[:8])  # Limit to 8 technologies
             logger.info(f"   ✓ Inferred Tech Stack: {data['overview']['Tech Stack']}")
+        else:
+            logger.warning(f"   ⚠️ Could not infer Tech Stack from activities")
+
+    if not data["overview"].get("Compliance") or data["overview"].get("Compliance").strip() == "":
+        # Check if compliance mentioned in activities or project name
+        compliance_keywords = {
+            "GDPR": ["gdpr", "general data protection"],
+            "HIPAA": ["hipaa", "health insurance portability"],
+            "SOC2": ["soc 2", "soc2", "service organization control"],
+            "ISO 27001": ["iso 27001", "iso27001"],
+            "PCI DSS": ["pci dss", "pci-dss", "payment card industry"],
+            "CCPA": ["ccpa", "california consumer privacy"]
+        }
+
+        search_text = (
+            data["overview"].get("Project Name", "") + " " +
+            data["overview"].get("Additional Notes", "") + " " +
+            " ".join([
+                str(a.get("Activities", "")) + " " + str(a.get("Description", ""))
+                for a in activities
+            ])
+        ).lower()
+
+        found_compliance = []
+        for standard, keywords in compliance_keywords.items():
+            if any(kw in search_text for kw in keywords):
+                found_compliance.append(standard)
+
+        if found_compliance:
+            data["overview"]["Compliance"] = ", ".join(found_compliance)
+            logger.info(f"   ✓ Inferred Compliance: {data['overview']['Compliance']}")
+        else:
+            data["overview"]["Compliance"] = "Not specified"
+            logger.info(f"   ✓ Set Compliance to: Not specified")
 
     if not data["overview"].get("Use Cases"):
         # Infer use cases from activities
