@@ -66,54 +66,128 @@ export default function Dashboard() {
   dailyData.sort((a, b) => new Date(a.day) - new Date(b.day));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-800 dark:text-gray-100">
-            Welcome {user ? `, ${user.username}` : ""}!
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">{today}</p>
-          <p className="text-gray-500 dark:text-gray-400">
-            Here’s a quick overview of your scoping activity.
-          </p>
+      <div className="relative">
+        <div className="relative bg-white/60 dark:bg-dark-surface/60 backdrop-blur-xl rounded-3xl p-8 shadow-glow border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl -z-10"></div>
+
+          <div className="relative z-10">
+            <h1 className="text-4xl font-extrabold bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent mb-2">
+              Welcome back{user ? `, ${user.username}` : ""}!
+            </h1>
+            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mb-1">
+              <span className="status-dot status-online"></span>
+              <p className="text-sm font-medium">{today}</p>
+            </div>
+            <p className="text-gray-600 dark:text-gray-400">
+              Here's a quick overview of your scoping activity.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+          <div className="relative z-10">
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Total Projects</p>
+            <p className="text-4xl font-extrabold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">{projects.length}</p>
+          </div>
+        </div>
+
+        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-accent/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+          <div className="relative z-10">
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">This Week</p>
+            <p className="text-4xl font-extrabold bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+              {projects.filter(p => {
+                const created = new Date(p.created_at);
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                return created >= weekAgo;
+              }).length}
+            </p>
+          </div>
+        </div>
+
+        <div className="group relative bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg hover:shadow-glow transition-all duration-300 border border-gray-200/50 dark:border-dark-muted/50 overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-secondary/20 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500"></div>
+          <div className="relative z-10">
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Active</p>
+            <p className="text-4xl font-extrabold bg-gradient-to-r from-secondary to-primary bg-clip-text text-transparent">{projects.length}</p>
+          </div>
         </div>
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Complexity Bar */}
-        <div className="bg-white dark:bg-dark-surface p-6 rounded-xl shadow-md border border-gray-200 dark:border-dark-muted">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-100">
-            Projects by Complexity
-          </h2>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-gray-200/50 dark:border-dark-muted/50 hover:shadow-glow transition-all duration-300">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
+              <Folder className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              Projects by Complexity
+            </h2>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
             <BarChart data={complexityData}>
-              <XAxis dataKey="complexity" stroke="#9CA3AF" fontSize={12} />
-              <YAxis stroke="#9CA3AF" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: "12px" }} />
-              <Bar dataKey="count" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+              <XAxis dataKey="complexity" stroke="#9CA3AF" fontSize={13} fontWeight={600} />
+              <YAxis stroke="#9CA3AF" fontSize={13} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  fontSize: "13px",
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  border: "none",
+                  borderRadius: "12px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+                }}
+              />
+              <Bar dataKey="count" fill="url(#colorGradient)" radius={[8, 8, 0, 0]} />
+              <defs>
+                <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#14b8a6" />
+                  <stop offset="100%" stopColor="#0d9488" />
+                </linearGradient>
+              </defs>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Daily Line */}
-        <div className="bg-white dark:bg-dark-surface p-6 rounded-xl shadow-md border border-gray-200 dark:border-dark-muted">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-100">
-            Projects Created per Day
-          </h2>
-          <ResponsiveContainer width="100%" height={220}>
+        <div className="bg-white/80 dark:bg-dark-surface/80 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-gray-200/50 dark:border-dark-muted/50 hover:shadow-glow transition-all duration-300">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-secondary flex items-center justify-center shadow-lg">
+              <History className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+              Projects Timeline
+            </h2>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
             <LineChart data={dailyData}>
-              <XAxis dataKey="day" stroke="#9CA3AF" fontSize={12} />
-              <YAxis stroke="#9CA3AF" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: "12px" }} />
+              <XAxis dataKey="day" stroke="#9CA3AF" fontSize={13} fontWeight={600} />
+              <YAxis stroke="#9CA3AF" fontSize={13} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{
+                  fontSize: "13px",
+                  backgroundColor: "rgba(255, 255, 255, 0.95)",
+                  border: "none",
+                  borderRadius: "12px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+                }}
+              />
               <Line
                 type="monotone"
                 dataKey="count"
                 stroke="#14b8a6"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+                strokeWidth={3}
+                dot={{ r: 4, fill: "#14b8a6", strokeWidth: 2, stroke: "#fff" }}
+                activeDot={{ r: 6, fill: "#0d9488", strokeWidth: 3, stroke: "#fff" }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -121,20 +195,22 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link
           to="/projects"
-          className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition"
+          className="group relative flex items-center justify-center gap-3 bg-gradient-to-r from-primary to-accent text-white py-4 px-6 rounded-2xl shadow-lg hover:shadow-glow-lg transition-all duration-300 overflow-hidden"
         >
-          <PlusCircle className="w-5 h-5" />
-          Create New Project
+          <div className="absolute inset-0 bg-gradient-to-r from-accent to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <PlusCircle className="w-5 h-5 relative z-10 group-hover:rotate-90 transition-transform duration-300" />
+          <span className="relative z-10 font-semibold">Create New Project</span>
         </Link>
         <Link
           to="/history"
-          className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition"
+          className="group relative flex items-center justify-center gap-3 bg-gradient-to-r from-accent to-secondary text-white py-4 px-6 rounded-2xl shadow-lg hover:shadow-glow-lg transition-all duration-300 overflow-hidden"
         >
-          <History className="w-5 h-5" />
-          View History
+          <div className="absolute inset-0 bg-gradient-to-r from-secondary to-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <History className="w-5 h-5 relative z-10 group-hover:scale-110 transition-transform duration-300" />
+          <span className="relative z-10 font-semibold">View Project History</span>
         </Link>
       </div>
 
