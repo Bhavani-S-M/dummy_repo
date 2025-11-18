@@ -1462,6 +1462,31 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Try various field names for description
         description = (a.get("Description") or a.get("description") or "").strip()
 
+        # REPAIR: LLM often swaps Activities and Description fields
+        # If Description is empty but Activities looks like a description (long text), swap them
+        if not description and activity_name:
+            # Check if activity_name looks like a description (> 60 chars or has multiple sentences)
+            if len(activity_name) > 60 or '.' in activity_name or ',' in activity_name:
+                logger.warning(f"⚠️  LLM put description in Activities field. Swapping fields.")
+                logger.warning(f"   Activities (wrong): {activity_name[:80]}...")
+                # Try to extract the actual activity name from Owner field (LLM often puts it there)
+                potential_activity = owner
+                if potential_activity and not any(role_keyword in potential_activity.lower()
+                    for role_keyword in ["engineer", "developer", "analyst", "manager", "designer",
+                                        "architect", "admin", "qa", "writer", "devops", "security"]):
+                    # Owner looks like an activity name, not a role - swap it
+                    description = activity_name
+                    activity_name = potential_activity
+                    owner = ""  # Will be auto-assigned based on activity keywords
+                    logger.warning(f"   ✓ Fixed: Activities={activity_name[:50]}, Description={description[:50]}...")
+                else:
+                    # Just use activity_name as-is, generate description from it
+                    description = activity_name
+                    # Generate a short activity name from the long description
+                    words = activity_name.split()
+                    activity_name = ' '.join(words[:5]) if len(words) > 5 else activity_name
+                    logger.warning(f"   ✓ Generated short name: {activity_name}")
+
         # If no activity name but have description, use description as the name
         if not activity_name and description:
             activity_name = description
