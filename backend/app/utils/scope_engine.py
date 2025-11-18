@@ -443,9 +443,9 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
 
             hits.append({
                 "id": payload.get("chunk_id", str(r.id)),
-                "parent_id": payload.get("parent_id"),
-                "content": payload.get("chunk", ""),
-                "title": payload.get("title", ""),
+                "parent_id": payload.get("document_id"),  # Fixed: ETL stores as "document_id" not "parent_id"
+                "content": payload.get("content", ""),  # Fixed: ETL stores as "content" not "chunk"
+                "title": payload.get("file_name", ""),  # Use file_name as title
                 "score": score,
             })
 
