@@ -153,12 +153,17 @@ def _extract_json(s: str) -> dict:
     
 
 
-def _parse_date_safe(val: Any, fallback: datetime = None) -> datetime:
-    """Try to parse a date string; return fallback if invalid."""
+def _parse_date_safe(val: Any, fallback: datetime = None, min_date: datetime = None) -> datetime:
+    """Try to parse a date string; return fallback if invalid. Ensure date is not in the past."""
     if not val:
         return fallback
     try:
-        return datetime.strptime(str(val), "%Y-%m-%d")
+        parsed_date = datetime.strptime(str(val), "%Y-%m-%d")
+        # If min_date is provided and parsed date is before it, use min_date instead
+        if min_date and parsed_date < min_date:
+            logger.warning(f"⚠️  Date {parsed_date.strftime('%Y-%m-%d')} is in the past. Adjusting to {min_date.strftime('%Y-%m-%d')}")
+            return min_date
+        return parsed_date
     except Exception:
         return fallback
 
@@ -1453,8 +1458,9 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         end_date_val = (a.get("End Date") or a.get("end_date") or
                        a.get("EndDate") or a.get("end"))
 
-        s = _parse_date_safe(start_date_val, today)
-        e = _parse_date_safe(end_date_val, s + timedelta(days=30))
+        # Ensure dates are not in the past (min_date = today)
+        s = _parse_date_safe(start_date_val, today, min_date=today)
+        e = _parse_date_safe(end_date_val, s + timedelta(days=30), min_date=today)
         if e < s:
             e = s + timedelta(days=30)
 
@@ -1526,6 +1532,12 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     if activities and len(set(start_dates)) == 1 and len(set(end_dates)) == 1:
         logger.warning(f"⚠️  All activities have same dates - LLM error. Staggering activities sequentially...")
         base_start = start_dates[0]
+
+        # Ensure base_start is not in the past
+        if base_start < today:
+            logger.warning(f"⚠️  Base start date {base_start.strftime('%Y-%m-%d')} is in the past. Adjusting to today: {today.strftime('%Y-%m-%d')}")
+            base_start = today
+
         start_dates = []
         end_dates = []
         for idx, activity in enumerate(activities):
