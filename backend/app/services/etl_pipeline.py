@@ -21,7 +21,7 @@ import io
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
@@ -121,6 +121,21 @@ class ETLPipeline:
                     logger.debug(f"⏭️  Skipping unchanged document: {file_name}")
                     return
                 else:
+                    # Check if document already has a pending approval
+                    pending_check = await db.execute(
+                        select(models.PendingKBUpdate).where(
+                            and_(
+                                models.PendingKBUpdate.new_document_id == existing_doc.id,
+                                models.PendingKBUpdate.status == "pending"
+                            )
+                        )
+                    )
+                    has_pending_approval = pending_check.scalar_one_or_none() is not None
+
+                    if has_pending_approval:
+                        logger.debug(f"⏭️  Skipping document with pending approval: {file_name}")
+                        return
+
                     # Document exists but not vectorized (failed or reset) - reprocess it
                     logger.info(f"🔄 Reprocessing failed/reset document: {file_name}")
                     existing_doc.last_checked = datetime.now(timezone.utc)
