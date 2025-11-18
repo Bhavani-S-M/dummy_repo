@@ -6,7 +6,8 @@ import {
   Menu,
   History,
   Database,
-  Wallet,   
+  Wallet,
+  GitBranch,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProjects } from "../../contexts/ProjectContext";
@@ -36,11 +37,12 @@ export default function Sidebar({ isOpen, setIsOpen, mobileOpen }) {
     { path: "/ratecards", label: "Pricing", icon: <Wallet className="w-5 h-5" /> },
   ];
 
-  // Add Blob Manage only for superusers
+  // Add Blob Manage and ETL Pipeline only for superusers
   const navItems = user?.is_superuser
     ? [
         ...baseNavItems,
         { path: "/blobs", label: "Blob Manage", icon: <Database className="w-5 h-5" /> },
+        { path: "/etl", label: "ETL Pipeline", icon: <GitBranch className="w-5 h-5" /> },
       ]
     : baseNavItems;
 

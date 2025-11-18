@@ -17,8 +17,9 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const ResendVerification = lazy(() => import("./pages/ResendVerification"));
 const ProjectsHistory = lazy(() => import("./pages/ProjectsHistory"));
 const Profile = lazy(() => import("./pages/Profile"));
-const BlobDashboard = lazy(() => import("./pages/BlobDashboard")); 
-const RateCards = lazy(() => import("./pages/RateCards")); 
+const BlobDashboard = lazy(() => import("./pages/BlobDashboard"));
+const RateCards = lazy(() => import("./pages/RateCards"));
+const ETLDashboard = lazy(() => import("./pages/ETLDashboard")); 
 
 
 export default function App() {
@@ -113,6 +114,16 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <BlobDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ETL Admin Page */}
+          <Route
+            path="/etl"
+            element={
+              <ProtectedRoute>
+                <ETLDashboard />
               </ProtectedRoute>
             }
           />
