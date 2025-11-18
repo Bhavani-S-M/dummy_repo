@@ -292,7 +292,11 @@ class ETLPipeline:
 
             points = []
             for idx, (chunk, vector) in enumerate(zip(chunks, embeddings)):
-                point_id = f"{doc.id}_{idx}"
+                # Convert UUID + index to stable integer ID for Qdrant
+                # Qdrant requires pure integers or pure UUIDs, not concatenated strings
+                point_id_str = f"{doc.id}_{idx}"
+                point_id = int(hashlib.sha256(point_id_str.encode()).hexdigest()[:16], 16)
+
                 points.append(
                     qdrant_models.PointStruct(
                         id=point_id,
@@ -318,7 +322,8 @@ class ETLPipeline:
             doc.is_vectorized = True
             doc.vectorized_at = datetime.now(timezone.utc)
             doc.vector_count = len(points)
-            doc.qdrant_point_ids = json.dumps([p.id for p in points])
+            # Store point IDs as integers (not strings)
+            doc.qdrant_point_ids = json.dumps([int(p.id) for p in points])
 
             # Update job status
             job.status = "completed"

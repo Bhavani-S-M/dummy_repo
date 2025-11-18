@@ -67,9 +67,12 @@ def embed_text_ollama(texts: List[str]) -> List[List[float]]:
 
     for attempt in range(2):  # Retry once
         try:
+            logger.info(f"🔄 Calling Ollama embedding API: {url} with model={model}, {len(texts)} texts")
             resp = requests.post(url, json=payload, timeout=120)
             resp.raise_for_status()
             data = resp.json()
+
+            logger.debug(f"📥 Ollama response keys: {list(data.keys())}")
 
             embeddings = (
                 data.get("embedding")
@@ -92,6 +95,7 @@ def embed_text_ollama(texts: List[str]) -> List[List[float]]:
             ]
 
             if not valid_vectors:
+                logger.error(f"❌ No valid embedding vectors found. Raw embeddings type: {type(embeddings)}, length: {len(embeddings) if isinstance(embeddings, list) else 'N/A'}")
                 raise ValueError("Empty or invalid embedding vectors")
 
             dim = len(valid_vectors[0])
@@ -101,10 +105,19 @@ def embed_text_ollama(texts: List[str]) -> List[List[float]]:
                     f"Update VECTOR_DIM in config if model changed."
                 )
 
+            logger.info(f"✅ Generated {len(valid_vectors)} embeddings with dimension {dim}")
             return valid_vectors
 
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"❌ Cannot connect to Ollama at {url}. Is Ollama running? Error: {e}")
+            if attempt == 0:
+                time.sleep(1.5)
+                continue
+            else:
+                logger.error("❌ Ollama embedding failed after retry - Ollama service not available.")
+                return []
         except Exception as e:
-            logger.error(f"Embedding attempt {attempt+1} failed: {e}")
+            logger.error(f"❌ Embedding attempt {attempt+1} failed: {type(e).__name__}: {e}")
             if attempt == 0:
                 time.sleep(1.5)
                 continue
