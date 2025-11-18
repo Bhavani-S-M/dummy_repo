@@ -1387,6 +1387,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Use flexible field name matching for owner
         # If no explicit owner, use first resource as owner
         owner = (a.get("Owner") or a.get("owner") or "").strip()
+        original_owner = owner  # Save original value for description repair logic
 
         # Validate owner - reject if it's a number or single character
         if owner and (owner.isdigit() or len(owner) <= 2):
@@ -1498,7 +1499,8 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
                 logger.warning(f"⚠️  LLM put description in Activities field. Swapping fields.")
                 logger.warning(f"   Activities (wrong): {activity_name[:80]}...")
                 # Try to extract the actual activity name from Owner field (LLM often puts it there)
-                potential_activity = owner
+                # Use original_owner before validation rejected it
+                potential_activity = original_owner
                 if potential_activity and not any(role_keyword in potential_activity.lower()
                     for role_keyword in ["engineer", "developer", "analyst", "manager", "designer",
                                         "architect", "admin", "qa", "writer", "devops", "security"]):
