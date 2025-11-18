@@ -1567,6 +1567,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
     # The resourcing_plan shows pre-discount costs
     # The cost_projection shows post-discount total
     discount_percentage = data.get("discount_percentage", 0)
+    logger.info(f"💰 Discount percentage from input data: {discount_percentage}")
 
     # --- Overview ---
     # Handle both root-level fields and nested overview object
@@ -1716,77 +1717,77 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         logger.info("   ✓ Generated fallback project_summary")
 
 
-    # Generate cost_projection from resourcing_plan if it doesn't exist or was removed
-    if "cost_projection" not in data or not isinstance(data.get("cost_projection"), dict):
-        logger.info("💰 Generating cost_projection from resourcing_plan...")
+    # ALWAYS regenerate cost_projection from resourcing_plan to ensure correct calculations
+    # (LLM often makes calculation errors with discounts)
+    logger.info("💰 Generating cost_projection from resourcing_plan...")
 
-        # Build resource_costs from resourcing_plan
-        resource_costs = []
-        for plan_entry in resourcing_plan:
-            role = plan_entry.get("Resources", "Unknown Role")
-            rate = plan_entry.get("Rate/month", 0)
-            effort = plan_entry.get("Efforts", 0)
-            total = plan_entry.get("Cost", 0)
+    # Build resource_costs from resourcing_plan
+    resource_costs = []
+    for plan_entry in resourcing_plan:
+        role = plan_entry.get("Resources", "Unknown Role")
+        rate = plan_entry.get("Rate/month", 0)
+        effort = plan_entry.get("Efforts", 0)
+        total = plan_entry.get("Cost", 0)
 
-            if effort > 0:  # Only include roles with actual effort
-                resource_costs.append({
-                    "role": role,
-                    "rate_per_month": rate,
-                    "effort_months": effort,
-                    "total": total
-                })
+        if effort > 0:  # Only include roles with actual effort
+            resource_costs.append({
+                "role": role,
+                "rate_per_month": rate,
+                "effort_months": effort,
+                "total": total
+            })
 
-        # Calculate infrastructure costs (10% of resource costs)
-        resource_total = sum(rc["total"] for rc in resource_costs)
-        infrastructure_amount = round(resource_total * 0.10, 2)
-        infrastructure_costs = [{
-            "category": "Cloud Infrastructure",
-            "description": f"Azure hosting, databases, and storage for {duration:.1f} months",
-            "amount": infrastructure_amount
-        }]
+    # Calculate infrastructure costs (10% of resource costs)
+    resource_total = sum(rc["total"] for rc in resource_costs)
+    infrastructure_amount = round(resource_total * 0.10, 2)
+    infrastructure_costs = [{
+        "category": "Cloud Infrastructure",
+        "description": f"Azure hosting, databases, and storage for {duration:.1f} months",
+        "amount": infrastructure_amount
+    }]
 
-        # Calculate other costs (5% contingency)
-        contingency_amount = round(resource_total * 0.05, 2)
-        other_costs = [{
-            "category": "Contingency Buffer",
-            "description": "5% buffer for unforeseen costs",
-            "amount": contingency_amount
-        }]
+    # Calculate other costs (5% contingency)
+    contingency_amount = round(resource_total * 0.05, 2)
+    other_costs = [{
+        "category": "Contingency Buffer",
+        "description": "5% buffer for unforeseen costs",
+        "amount": contingency_amount
+    }]
 
-        # Calculate totals
-        subtotal = resource_total + infrastructure_amount + contingency_amount
+    # Calculate totals
+    subtotal = resource_total + infrastructure_amount + contingency_amount
 
-        # Apply discount if present
-        disc_pct = discount_percentage if (discount_percentage and discount_percentage > 0) else 0
-        disc_amt = round(subtotal * (disc_pct / 100), 2) if disc_pct > 0 else 0
-        total_cost = subtotal - disc_amt
+    # Apply discount if present
+    disc_pct = discount_percentage if (discount_percentage and discount_percentage > 0) else 0
+    disc_amt = round(subtotal * (disc_pct / 100), 2) if disc_pct > 0 else 0
+    total_cost = subtotal - disc_amt
 
-        # Build cost_projection
-        data["cost_projection"] = {
-            "currency": "USD",
-            "resource_costs": resource_costs,
-            "infrastructure_costs": infrastructure_costs,
-            "other_costs": other_costs,
-            "subtotal": subtotal,
-            "discount_percentage": disc_pct,
-            "discount_amount": disc_amt,
-            "total_cost": total_cost,
-            "assumptions": [
-                "Based on industry standard rates for IT resources",
-                "Includes 10% for cloud infrastructure costs",
-                "Includes 5% contingency buffer for unforeseen expenses"
-            ]
-        }
+    # Build cost_projection
+    data["cost_projection"] = {
+        "currency": "USD",
+        "resource_costs": resource_costs,
+        "infrastructure_costs": infrastructure_costs,
+        "other_costs": other_costs,
+        "subtotal": subtotal,
+        "discount_percentage": disc_pct,
+        "discount_amount": disc_amt,
+        "total_cost": total_cost,
+        "assumptions": [
+            "Based on industry standard rates for IT resources",
+            "Includes 10% for cloud infrastructure costs",
+            "Includes 5% contingency buffer for unforeseen expenses"
+        ]
+    }
 
-        if disc_pct > 0:
-            data["cost_projection"]["assumptions"].append(f"{disc_pct}% discount applied as per agreement")
+    if disc_pct > 0:
+        data["cost_projection"]["assumptions"].append(f"{disc_pct}% discount applied as per agreement")
 
-        logger.info(f"   ✓ Generated cost_projection with total_cost: ${total_cost:,.2f}")
-        logger.info(f"   ✓ Resource costs: ${resource_total:,.2f}")
-        logger.info(f"   ✓ Infrastructure: ${infrastructure_amount:,.2f}")
-        logger.info(f"   ✓ Contingency: ${contingency_amount:,.2f}")
-        if disc_pct > 0:
-            logger.info(f"   ✓ Discount ({disc_pct}%): -${disc_amt:,.2f}")
+    logger.info(f"   ✓ Generated cost_projection with total_cost: ${total_cost:,.2f}")
+    logger.info(f"   ✓ Resource costs: ${resource_total:,.2f}")
+    logger.info(f"   ✓ Infrastructure: ${infrastructure_amount:,.2f}")
+    logger.info(f"   ✓ Contingency: ${contingency_amount:,.2f}")
+    if disc_pct > 0:
+        logger.info(f"   ✓ Discount ({disc_pct}%): -${disc_amt:,.2f}")
 
     # Update overview with correct total cost (after cost_projection is generated)
     if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
