@@ -110,6 +110,17 @@ export default function ETLDashboard() {
     }
   };
 
+  // Helper function to check if a job failed recently (within last 24 hours)
+  const getRecentFailedJobs = () => {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return processingJobs.filter(job => {
+      if (job.status !== "failed") return false;
+      const failedAt = job.completed_at || job.started_at;
+      if (!failedAt) return true; // Include if no timestamp (safety)
+      return new Date(failedAt) > twentyFourHoursAgo;
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -358,15 +369,15 @@ export default function ETLDashboard() {
         {/* Processing Jobs Tab */}
         {activeTab === "jobs" && (
           <div className="space-y-4">
-            {/* Failed Documents Alert and Reset Button */}
-            {processingJobs.some(j => j.status === "failed") && (
+            {/* Failed Documents Alert and Reset Button - Only show for recent failures (last 24 hours) */}
+            {getRecentFailedJobs().length > 0 && (
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="font-semibold text-orange-900 dark:text-orange-100">Failed Documents Detected</p>
                     <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                      {processingJobs.filter(j => j.status === "failed").length} document(s) failed processing.
+                      {getRecentFailedJobs().length} document(s) failed processing in the last 24 hours.
                       Make sure Ollama is running, then click "Reset & Retry" to reprocess them.
                     </p>
                   </div>
