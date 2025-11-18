@@ -1634,10 +1634,10 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         data["overview"]["Currency"] = "USD"
 
     # Add discount to overview if present
+    # REMOVED: This was calculating total_cost incorrectly from resourcing_plan
+    # Now moved to after cost_projection is generated (below)
     if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
         data["overview"]["Discount"] = f"{discount_percentage}%"
-        total_cost = sum(plan_entry.get("Cost", 0) for plan_entry in resourcing_plan)
-        data["overview"]["Total Cost (After Discount)"] = f"${total_cost:,.2f}"
 
     data["activities"] = activities
     data["resourcing_plan"] = resourcing_plan
@@ -1787,6 +1787,11 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         logger.info(f"   ✓ Contingency: ${contingency_amount:,.2f}")
         if disc_pct > 0:
             logger.info(f"   ✓ Discount ({disc_pct}%): -${disc_amt:,.2f}")
+
+    # Update overview with correct total cost (after cost_projection is generated)
+    if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
+        final_total = data.get("cost_projection", {}).get("total_cost", 0)
+        data["overview"]["Total Cost (After Discount)"] = f"${final_total:,.2f}"
 
     # Preserve any other fields that the LLM generated (risks, assumptions, etc.)
     # Just ensure we don't accidentally remove them
