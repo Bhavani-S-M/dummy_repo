@@ -1523,7 +1523,19 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         # Log for debugging
         logger.info(f"Activity {idx}: Name='{activity_name[:50] if activity_name else 'EMPTY'}...', Desc='{description[:50] if description else 'EMPTY'}'")
 
-        # REPAIR: LLM often puts full description in Activities field, leaving Description empty
+        # REPAIR CASE 1: Activities is empty but Description is populated
+        # Generate a short activity name from Description
+        activity_is_empty = not activity_name or len(activity_name) < 5
+        if activity_is_empty and description and len(description) > 10:
+            logger.warning(f"⚠️  Activities field is empty/short but Description has content - generating activity name")
+            logger.warning(f"   Description: {description[:80]}...")
+
+            # Generate short activity name from first 5 words of description
+            words = description.split()
+            activity_name = ' '.join(words[:5]) if len(words) >= 5 else ' '.join(words[:3])
+            logger.warning(f"   ✓ Generated activity name: '{activity_name}'")
+
+        # REPAIR CASE 2: LLM often puts full description in Activities field, leaving Description empty
         # If Description is empty/very short but Activities is long, move Activities text to Description
         description_is_empty = not description or len(description) < 10
         if description_is_empty and activity_name and len(activity_name) > 50:
