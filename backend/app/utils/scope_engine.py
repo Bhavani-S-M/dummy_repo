@@ -2346,8 +2346,9 @@ Generate activities with realistic start/end dates, proper role assignments, mea
     rate_cards = []
     try:
         if project.company_id:
+            from sqlalchemy import select as sql_select
             result = await db.execute(
-                select(models.RateCard).where(
+                sql_select(models.RateCard).where(
                     models.RateCard.company_id == project.company_id
                 )
             )
