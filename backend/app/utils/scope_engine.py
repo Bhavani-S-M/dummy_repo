@@ -2079,8 +2079,9 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         tech_stack = data["overview"].get("Tech Stack", "")
         complexity = data["overview"].get("Complexity", "Medium")
 
-        # Calculate total cost
-        total_cost = data.get("cost_projection", {}).get("total_cost", 0)
+        # Calculate total cost - ensure cost_projection is a dict
+        cost_proj = data.get("cost_projection", {})
+        total_cost = cost_proj.get("total_cost", 0) if isinstance(cost_proj, dict) else 0
 
         # Generate executive summary
         exec_summary = f"This project aims to deliver a comprehensive {project_name} solution in the {domain} domain. "
@@ -2213,7 +2214,8 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
     # Update overview with correct total cost (after cost_projection is generated)
     if discount_percentage and isinstance(discount_percentage, (int, float)) and discount_percentage > 0:
-        final_total = data.get("cost_projection", {}).get("total_cost", 0)
+        cost_proj = data.get("cost_projection", {})
+        final_total = cost_proj.get("total_cost", 0) if isinstance(cost_proj, dict) else 0
         data["overview"]["Total Cost (After Discount)"] = f"${final_total:,.2f}"
 
     # Preserve any other fields that the LLM generated (risks, assumptions, etc.)
@@ -2536,6 +2538,12 @@ Generate activities with realistic start/end dates, proper role assignments, mea
                     logger.warning(f"   Cost projection keys: {list(cost_proj.keys())}")
                     logger.warning(f"   This will be regenerated from resourcing plan in clean_scope")
                     raw.pop('cost_projection', None)
+            else:
+                # LLM returned cost_projection as a string or other type - remove it
+                logger.warning(f"❌ Cost projection is not a dict (type: {type(cost_proj).__name__}). Removing it.")
+                logger.warning(f"   Value: {cost_proj}")
+                logger.warning(f"   This will be regenerated from resourcing plan in clean_scope")
+                raw.pop('cost_projection', None)
 
         # Validate project_summary structure - try to repair if it has wrong field names
         if raw.get('project_summary'):

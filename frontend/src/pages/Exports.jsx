@@ -34,7 +34,6 @@ const TABS = [
   { key: "activities", label: "Activities Breakdown", icon: FileText },
   { key: "resourcing", label: "Resourcing Plan", icon: FileText },
   { key: "architecture", label: "Architecture Diagram", icon: FileText },
-  { key: "costing", label: "Cost Projection", icon: FileText },
   { key: "summary", label: "Summary", icon: FileText },
 ];
 
