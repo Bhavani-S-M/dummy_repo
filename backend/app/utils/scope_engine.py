@@ -604,7 +604,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '      "Activities": "Requirements Gathering",\n'
         '      "Description": "Collect and document business requirements",\n'
         '      "Owner": "Business Analyst",\n'
-        '      "Resources": "Product Manager",\n'
+        '      "Resources": "Project Manager, Solution Architect",\n'
         '      "Start Date": "2025-11-17",\n'
         '      "End Date": "2025-12-17",\n'
         '      "Effort Months": 1.0\n'
@@ -614,7 +614,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '      "Activities": "Database Design",\n'
         '      "Description": "Design data models and schema",\n'
         '      "Owner": "Data Engineer",\n'
-        '      "Resources": "Backend Developer",\n'
+        '      "Resources": "Solution Architect, Backend Developer",\n'
         '      "Start Date": "2025-12-01",\n'
         '      "End Date": "2026-01-15",\n'
         '      "Effort Months": 1.5\n'
@@ -624,7 +624,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '      "Activities": "API Development",\n'
         '      "Description": "Build RESTful APIs",\n'
         '      "Owner": "Backend Developer",\n'
-        '      "Resources": "QA Engineer",\n'
+        '      "Resources": "Data Engineer, QA Engineer",\n'
         '      "Start Date": "2025-12-15",\n'
         '      "End Date": "2026-02-28",\n'
         '      "Effort Months": 2.5\n'
@@ -686,7 +686,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '      "Activities": string,  // REQUIRED: Activity name/title\n'
         '      "Description": string,  // REQUIRED: Detailed description of what this activity involves (must not be empty)\n'
         '      "Owner": string,  // REQUIRED: Primary role responsible (e.g., "Project Manager", "Data Engineer")\n'
-        '      "Resources": string,  // Supporting roles (comma-separated, e.g., "Business Analyst, QA Engineer") or empty if none\n'
+        '      "Resources": string,  // REQUIRED: Supporting/collaborating roles (comma-separated, e.g., "Business Analyst, QA Engineer"). Most activities need 1-2 supporting roles. Examples: For development activities include "Solution Architect, QA Engineer"; for analysis include "Project Manager, Data Engineer"\n'
         '      "Start Date": "yyyy-mm-dd",\n'
         '      "End Date": "yyyy-mm-dd",\n'
         '      "Effort Months": number\n'
@@ -1536,6 +1536,61 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
 
         # Remove owner from resources if duplicated
         raw_deps = [r for r in raw_deps if r.lower() != owner.lower()]
+
+        # FALLBACK: If resources are empty, auto-assign based on activity keywords and owner role
+        if not raw_deps and owner:
+            activity_text = (str(a.get("Activities") or a.get("Name") or a.get("activity") or "") + " " +
+                           str(a.get("Description") or a.get("description") or "")).lower()
+
+            # Map owner role to appropriate supporting resources
+            owner_lower = owner.lower()
+
+            # Use activity keywords and owner role to determine supporting resources
+            if any(kw in activity_text for kw in ["requirement", "analysis", "use case", "stakeholder", "business"]):
+                raw_deps = ["Project Manager", "Solution Architect"]
+            elif any(kw in activity_text for kw in ["infrastructure", "setup", "deployment", "azure", "cloud", "devops"]):
+                raw_deps = ["Solution Architect", "Backend Developer"]
+            elif any(kw in activity_text for kw in ["data", "ingestion", "wrangling", "etl", "pipeline", "databricks"]):
+                raw_deps = ["Solution Architect", "Backend Developer"]
+            elif any(kw in activity_text for kw in ["database", "dba", "sql", "query", "schema"]):
+                raw_deps = ["Data Engineer", "Backend Developer"]
+            elif any(kw in activity_text for kw in ["monitoring", "observability", "logging", "alerting"]):
+                raw_deps = ["DevOps Engineer", "Data Engineer"]
+            elif any(kw in activity_text for kw in ["testing", "validation", "qa", "quality"]):
+                raw_deps = ["Data Engineer", "Backend Developer"]
+            elif any(kw in activity_text for kw in ["ui", "ux", "interface", "design", "frontend", "powerbi", "visualization"]):
+                raw_deps = ["Frontend Developer", "UI/UX Designer"]
+            elif any(kw in activity_text for kw in ["compliance", "security", "infosec", "regulatory", "audit"]):
+                raw_deps = ["DevOps Engineer", "Project Manager"]
+            elif any(kw in activity_text for kw in ["documentation", "glossary", "wiki", "knowledge"]):
+                raw_deps = ["Business Analyst", "Project Manager"]
+            elif any(kw in activity_text for kw in ["management", "change", "incident", "problem", "request"]):
+                raw_deps = ["Business Analyst", "Solution Architect"]
+            elif any(kw in activity_text for kw in ["integration", "feed", "api", "service"]):
+                raw_deps = ["Data Engineer", "QA Engineer"]
+            elif any(kw in activity_text for kw in ["model", "semantic", "data model", "architecture"]):
+                raw_deps = ["Data Engineer", "Business Analyst"]
+            elif any(kw in activity_text for kw in ["access", "permission", "github", "workspace", "admin"]):
+                raw_deps = ["Project Manager", "Solution Architect"]
+            else:
+                # Default fallback based on owner role
+                if "analyst" in owner_lower:
+                    raw_deps = ["Project Manager", "Data Engineer"]
+                elif "engineer" in owner_lower or "developer" in owner_lower:
+                    raw_deps = ["Solution Architect", "QA Engineer"]
+                elif "architect" in owner_lower:
+                    raw_deps = ["Project Manager", "Data Engineer"]
+                elif "manager" in owner_lower:
+                    raw_deps = ["Business Analyst", "Solution Architect"]
+                elif "qa" in owner_lower or "test" in owner_lower:
+                    raw_deps = ["Backend Developer", "Data Engineer"]
+                else:
+                    raw_deps = ["Project Manager", "Business Analyst"]
+
+            # Remove owner from auto-assigned resources to avoid duplication
+            raw_deps = [r for r in raw_deps if r.lower() != owner.lower()]
+
+            logger.info(f"  ℹ️  Auto-assigned Resources for '{owner}': {', '.join(raw_deps)}")
 
         # Owner always included, then other resources
         roles = [owner] + raw_deps
