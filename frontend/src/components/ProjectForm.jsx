@@ -690,7 +690,7 @@ export default function ProjectForm({ onSubmit }) {
             <option value="">Select Complexity</option>
             <option value="Simple">Simple</option>
             <option value="Medium">Medium</option>
-            <option value="Large">Large</option>
+            <option value="High">High</option>
           </select>
           {validationErrors.complexity && (
             <p className="text-red-500 text-sm mt-1">{validationErrors.complexity}</p>

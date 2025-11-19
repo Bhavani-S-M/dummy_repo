@@ -527,20 +527,37 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
     if rate_cards and len(rate_cards) > 0:
         rate_card_context = (
             "========================================\n"
-            "COMPANY RATE CARD - MANDATORY ROLES\n"
+            "⚠️  COMPANY RATE CARD - MANDATORY ROLES ONLY ⚠️\n"
             "========================================\n\n"
-            "The company has predefined rate cards with specific roles and rates.\n"
-            "YOU MUST use ONLY these roles in your resource plan:\n\n"
+            "⛔ CRITICAL CONSTRAINT: The company has predefined rate cards.\n"
+            "⛔ YOU ARE ABSOLUTELY FORBIDDEN from using ANY role not listed below.\n"
+            "⛔ Using unlisted roles will cause IMMEDIATE REJECTION of your output.\n\n"
+            "ALLOWED ROLES (you MUST use ONLY these - NO EXCEPTIONS):\n\n"
         )
         for rc in rate_cards:
-            rate_card_context += f"  - {rc['role']}: ${rc['rate']}/month\n"
+            rate_card_context += f"  ✓ {rc['role']}: ${rc['rate']}/month\n"
         rate_card_context += (
             "\n"
-            "CRITICAL RULES FOR RESOURCE PLAN:\n"
-            "1. Use ONLY the roles listed above in activities and resourcing_plan\n"
-            "2. Use the EXACT rates specified in the rate card\n"
-            "3. DO NOT invent new roles or use different roles\n"
-            "4. Calculate costs using: Cost = Effort Months × Rate/month\n\n"
+            "🚨 ENFORCEMENT RULES - VIOLATION = REJECTION 🚨\n"
+            "1. EVERY role in Owner, Resources, and resourcing_plan MUST be from the list above\n"
+            "2. DO NOT create similar roles (e.g., if list has 'Backend Developer', do NOT use 'Backend Engineer')\n"
+            "3. DO NOT use generic roles like 'Data Engineer', 'Azure Architect', 'BI Developer' unless they are EXACTLY in the list\n"
+            "4. Use the EXACT role names as shown (case-sensitive matching)\n"
+            "5. Use the EXACT rates specified - no estimation\n"
+            "6. If a role is needed but not in the list, use the CLOSEST matching role from the list\n"
+            "7. Map project needs to available roles intelligently:\n"
+            "   - Data work → Use 'DataOps Engineer' or 'SDE – Python/PySpark/AWS'\n"
+            "   - Architecture → Use 'Technical Lead'\n"
+            "   - Development → Use 'Backend Developer', 'Frontend Developer', or appropriate SDE role\n"
+            "   - Testing → Use 'QA Engineer'\n"
+            "   - DevOps → Use 'DataOps/DevOps Engineer II' or 'DataOps/DevOps Lead'\n\n"
+            "Example of CORRECT usage:\n"
+            "  Owner: 'Backend Developer' ✓\n"
+            "  Resources: 'Technical Lead, QA Engineer' ✓\n\n"
+            "Example of WRONG usage (will be REJECTED):\n"
+            "  Owner: 'Data Engineer' ❌ (not in rate card - use 'DataOps Engineer' or 'SDE – Python/PySpark/AWS')\n"
+            "  Owner: 'Azure Architect' ❌ (not in rate card - use 'Technical Lead')\n"
+            "  Owner: 'BI Developer' ❌ (not in rate card - use 'Backend Developer' or 'SDE – Python/PySpark/AWS')\n\n"
         )
     else:
         rate_card_context = (
