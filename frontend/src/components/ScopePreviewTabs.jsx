@@ -26,6 +26,21 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
     // Check if data is array of objects
     if (typeof data[0] === 'object' && !Array.isArray(data[0])) {
       const headers = Object.keys(data[0]);
+
+      // Check if this is a resourcing plan (has "Cost" column)
+      const isResourcingPlan = headers.includes('Cost') || headers.includes('cost');
+      let totalCost = 0;
+
+      if (isResourcingPlan) {
+        // Calculate total cost
+        data.forEach(row => {
+          const cost = parseFloat(row.Cost || row.cost || 0);
+          if (!isNaN(cost)) {
+            totalCost += cost;
+          }
+        });
+      }
+
       return (
         <div className="overflow-x-auto">
           {title && <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">{title}</h4>}
@@ -49,6 +64,22 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
                   ))}
                 </tr>
               ))}
+              {/* Add Total Cost Row for Resourcing Plan */}
+              {isResourcingPlan && (
+                <tr className="bg-blue-50 dark:bg-blue-900/20 font-bold">
+                  {headers.map((header, colIdx) => (
+                    <td key={colIdx} className="px-4 py-3 text-sm border-t-2 border-blue-500 dark:border-blue-400">
+                      {header === 'Resources' || header === 'resources' ? (
+                        <span className="text-blue-900 dark:text-blue-100">Total Project Cost</span>
+                      ) : header === 'Cost' || header === 'cost' ? (
+                        <span className="text-blue-900 dark:text-blue-100">${totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

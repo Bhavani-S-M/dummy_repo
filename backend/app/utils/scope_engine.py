@@ -473,7 +473,7 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
         logger.warning(f"RAG retrieval (Qdrant) failed: {e}")
         return []
 
-def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, questions_context: str | None = None) -> str:
+def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, questions_context: str | None = None, rate_cards: List[Dict] = None) -> str:
     import tiktoken
 
     # Tokenizer
@@ -522,6 +522,38 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         f"Duration (months): {duration or '(infer if missing)'}\n\n"
     )
 
+    # Build rate card context for the prompt
+    rate_card_context = ""
+    if rate_cards and len(rate_cards) > 0:
+        rate_card_context = (
+            "========================================\n"
+            "COMPANY RATE CARD - MANDATORY ROLES\n"
+            "========================================\n\n"
+            "The company has predefined rate cards with specific roles and rates.\n"
+            "YOU MUST use ONLY these roles in your resource plan:\n\n"
+        )
+        for rc in rate_cards:
+            rate_card_context += f"  - {rc['role']}: ${rc['rate']}/month\n"
+        rate_card_context += (
+            "\n"
+            "CRITICAL RULES FOR RESOURCE PLAN:\n"
+            "1. Use ONLY the roles listed above in activities and resourcing_plan\n"
+            "2. Use the EXACT rates specified in the rate card\n"
+            "3. DO NOT invent new roles or use different roles\n"
+            "4. Calculate costs using: Cost = Effort Months × Rate/month\n\n"
+        )
+    else:
+        rate_card_context = (
+            "========================================\n"
+            "RESOURCE PLAN - LLM-GENERATED ROLES\n"
+            "========================================\n\n"
+            "No company rate card is available. You should:\n"
+            "1. Identify suitable IT roles based on project activities\n"
+            "2. Use standard industry roles (e.g., Business Analyst, Data Engineer, Backend Developer, etc.)\n"
+            "3. Estimate monthly rates based on generic market rates (e.g., $2000-$5000/month)\n"
+            "4. Generate a complete resource plan with these LLM-generated roles\n\n"
+        )
+
     today_str = datetime.today().date().isoformat()
 
     return (
@@ -560,7 +592,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '  "overview": {\n'
         '    "Project Name": "Customer Analytics Platform",\n'
         '    "Domain": "Data Analytics",\n'
-        '    "Complexity": "Large",\n'
+        '    "Complexity": "High",\n'
         '    "Tech Stack": "Python, PostgreSQL, React, AWS",\n'
         '    "Use Cases": "Customer behavior analysis, predictive modeling",\n'
         '    "Compliance": "GDPR, SOC2",\n'
@@ -642,7 +674,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '  "overview": {\n'
         '    "Project Name": string,  // REQUIRED: Extract from RFP title or infer from content\n'
         '    "Domain": string,  // REQUIRED: Industry/business domain (e.g., "Healthcare", "Finance", "E-commerce", "Data Analytics")\n'
-        '    "Complexity": string,  // REQUIRED: Must be "Simple", "Medium", or "Large" based on project duration and scope\n'
+        '    "Complexity": string,  // REQUIRED: Must be "Simple", "Medium", or "High" based on project duration and scope\n'
         '    "Tech Stack": string,  // REQUIRED: Technologies used (e.g., "Python, React, PostgreSQL, AWS")\n'
         '    "Use Cases": string,  // REQUIRED: Primary use cases/applications (e.g., "Customer analytics, predictive modeling")\n'
         '    "Compliance": string,  // Regulatory requirements if mentioned (e.g., "GDPR, SOC2"), or empty string if none\n'
@@ -776,6 +808,7 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "  * If you include it, leave it as null or omit it entirely\n"
         "  * Never put descriptive text like 'Not provided' in architecture_diagram field\n"
         f"{user_context}"
+        f"{rate_card_context}"
         f"RFP / Project Files Content:\n{rfp_text}\n\n"
         f"Knowledge Base Context (for enrichment only):\n{kb_context}\n"
         f"Clarification Q&A (User-confirmed answers take highest priority)\n"
@@ -1831,7 +1864,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         elif duration <= 6 and len(activities) <= 20:
             data["overview"]["Complexity"] = "Medium"
         else:
-            data["overview"]["Complexity"] = "Large"
+            data["overview"]["Complexity"] = "High"
         logger.info(f"   ✓ Inferred Complexity: {data['overview']['Complexity']} (duration: {duration} months, {len(activities)} activities)")
 
     tech_stack_val = data["overview"].get("Tech Stack", "")
@@ -2307,11 +2340,29 @@ Generate activities with realistic start/end dates, proper role assignments, mea
         logger.warning(f" Could not include questions.json context: {e}")
         questions_context = None
 
-    
 
+
+    # ---------- Fetch company rate cards ----------
+    rate_cards = []
+    try:
+        if project.company_id:
+            result = await db.execute(
+                select(models.RateCard).where(
+                    models.RateCard.company_id == project.company_id
+                )
+            )
+            rate_cards_raw = result.scalars().all()
+            rate_cards = [{"role": rc.role_name, "rate": float(rc.monthly_rate)} for rc in rate_cards_raw]
+            if rate_cards:
+                logger.info(f"📋 Fetched {len(rate_cards)} rate cards for company {project.company_id}")
+            else:
+                logger.info(f"⚠️ No rate cards found for company {project.company_id} - will use LLM-generated roles")
+    except Exception as e:
+        logger.warning(f"Failed to fetch rate cards: {e}")
+        rate_cards = []
 
     # ---------- Build + query ----------
-    prompt = _build_scope_prompt(rfp_text, kb_chunks, project, questions_context=questions_context)
+    prompt = _build_scope_prompt(rfp_text, kb_chunks, project, questions_context=questions_context, rate_cards=rate_cards)
     try:
         # Step 1: Generate scope via Ollama
         logger.info(f"🤖 Calling Ollama for scope generation... (prompt length: {len(prompt)} chars)")

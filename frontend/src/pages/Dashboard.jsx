@@ -44,7 +44,7 @@ export default function Dashboard() {
   });
 
   // Complexity breakdown
-  const complexityData = ["Simple", "Medium", "Large"].map((c) => ({
+  const complexityData = ["Simple", "Medium", "High"].map((c) => ({
     complexity: c,
     count: projects.filter((p) => p.complexity === c).length,
   }));
