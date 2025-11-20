@@ -1807,6 +1807,117 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         logger.warning(f"Rate map fallback due to error: {e}")
         ROLE_RATE_MAP_DYNAMIC = ROLE_RATE_MAP
 
+    # --- ENFORCE RATE CARD ROLES: Map LLM-generated roles to actual rate card roles ---
+    if ROLE_RATE_MAP_DYNAMIC and len(ROLE_RATE_MAP_DYNAMIC) > 0:
+        # Check if this is company-specific rate card (not the default fallback)
+        rate_card_roles = set(ROLE_RATE_MAP_DYNAMIC.keys())
+
+        # Define role mapping rules from generic names to rate card roles
+        role_mapping = {
+            # Management
+            "Project Manager": "Technical Project Manager",
+            "Solution Architect": "Technical Lead",
+            "Technical Architect": "Technical Lead",
+
+            # Data roles
+            "Data Engineer": "SDE – Python/PySpark/AWS",
+            "Data Integration Lead": "SDE – Python/PySpark/AWS",
+            "ETL Developer": "SDE – Python/PySpark/AWS",
+            "Data Quality Analyst": "SDE – Python/PySpark/AWS",
+            "BI Developer": "SDE – Python/PySpark/AWS",
+            "BI Architect": "SDE – Python/PySpark/AWS",
+            "Data Modeler": "SDE – Python/PySpark/AWS",
+            "DAX Developer": "SDE – Python/PySpark/AWS",
+
+            # DevOps
+            "DevOps Engineer": "DataOps/DevOps Engineer II",
+            "Azure Architect": "DataOps/DevOps Lead",
+            "BI Administrator": "DataOps Engineer",
+
+            # Development
+            "Backend Engineer": "Backend Developer",
+            "Frontend Engineer": "Frontend Developer",
+
+            # Analysis
+            "Business Analyst": "Technical Project Manager",
+            "Data Governance Specialist": "Technical Project Manager",
+            "Compliance Officer": "Technical Project Manager",
+
+            # Security
+            "Security Analyst": "DataOps/DevOps Lead",
+            "Azure Security Specialist": "DataOps/DevOps Lead",
+
+            # Testing
+            "QA Lead": "QA Engineer",
+            "QA Tester": "QA Engineer",
+            "Performance Analyst": "QA Engineer",
+
+            # Design
+            "UI/UX Designer": "Design Lead – Product",
+
+            # Documentation
+            "Technical Writer": "Technical Project Manager",
+        }
+
+        # Apply mapping to role_order
+        mapped_role_order = []
+        for role in role_order:
+            if role in rate_card_roles:
+                # Role already matches rate card - keep it
+                mapped_role_order.append(role)
+            elif role in role_mapping and role_mapping[role] in rate_card_roles:
+                # Map to rate card role
+                mapped_role = role_mapping[role]
+                logger.info(f"  🔄 Mapped '{role}' → '{mapped_role}'")
+                mapped_role_order.append(mapped_role)
+
+                # Update role_month_usage to use the new role name
+                if role in role_month_usage:
+                    # Merge with existing mapped role if it exists
+                    if mapped_role in role_month_usage:
+                        for month, effort in role_month_usage[role].items():
+                            role_month_usage[mapped_role][month] = role_month_usage[mapped_role].get(month, 0) + effort
+                    else:
+                        role_month_usage[mapped_role] = role_month_usage[role]
+                    del role_month_usage[role]
+            else:
+                # No mapping found - use default mapping based on role type
+                if any(kw in role.lower() for kw in ["data", "etl", "bi", "analytics"]):
+                    default_role = "SDE – Python/PySpark/AWS"
+                elif any(kw in role.lower() for kw in ["devops", "azure", "infrastructure", "architect"]):
+                    default_role = "DataOps/DevOps Engineer II"
+                elif any(kw in role.lower() for kw in ["backend", "developer", "engineer"]):
+                    default_role = "Backend Developer"
+                elif any(kw in role.lower() for kw in ["frontend", "ui", "ux"]):
+                    default_role = "Frontend Developer"
+                elif any(kw in role.lower() for kw in ["qa", "test", "quality"]):
+                    default_role = "QA Engineer"
+                elif any(kw in role.lower() for kw in ["manager", "lead", "analyst"]):
+                    default_role = "Technical Project Manager"
+                else:
+                    default_role = "Technical Project Manager"
+
+                logger.warning(f"  ⚠️  Unmapped role '{role}' → using default '{default_role}'")
+                mapped_role_order.append(default_role)
+
+                # Update role_month_usage
+                if role in role_month_usage:
+                    if default_role in role_month_usage:
+                        for month, effort in role_month_usage[role].items():
+                            role_month_usage[default_role][month] = role_month_usage[default_role].get(month, 0) + effort
+                    else:
+                        role_month_usage[default_role] = role_month_usage[role]
+                    del role_month_usage[role]
+
+        # Remove duplicates while preserving order
+        seen = set()
+        role_order = []
+        for role in mapped_role_order:
+            if role not in seen:
+                role_order.append(role)
+                seen.add(role)
+
+        logger.info(f"✅ Enforced rate card roles: {role_order}")
 
     # --- Build final resourcing plan ---
     resourcing_plan = []
