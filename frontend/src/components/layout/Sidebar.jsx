@@ -27,21 +27,14 @@ export default function Sidebar({ isOpen, setIsOpen, mobileOpen }) {
   // Base nav items (everyone)
   const baseNavItems = [
     { path: "/dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
-    { path: "/projects", label: "Projects", icon: <FolderKanban className="w-5 h-5" /> },
-    { path: "/history", label: "Project History", icon: <History className="w-5 h-5" /> },
-    {
-      path: latestProjectId ? `/exports/${latestProjectId}` : "/exports",
-      label: "Exports",
-      icon: <FileSpreadsheet className="w-5 h-5" />,
-    },
     { path: "/ratecards", label: "Pricing", icon: <Wallet className="w-5 h-5" /> },
   ];
 
-  // Add Blob Manage and ETL Pipeline only for superusers
+  // Add Knowledge Base and ETL Pipeline only for superusers
   const navItems = user?.is_superuser
     ? [
         ...baseNavItems,
-        { path: "/blobs", label: "Blob Manage", icon: <Database className="w-5 h-5" /> },
+        { path: "/blobs", label: "Knowledge Base", icon: <Database className="w-5 h-5" /> },
         { path: "/etl", label: "ETL Pipeline", icon: <GitBranch className="w-5 h-5" /> },
       ]
     : baseNavItems;

@@ -246,7 +246,7 @@ export default function Dashboard() {
             <tbody>
               {[...projects]
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                .slice(0, 5)
+                .slice(0, 30)
                 .map((p) => (
 
                 <tr

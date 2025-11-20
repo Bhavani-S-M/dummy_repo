@@ -234,7 +234,9 @@ export default function ProjectForm({ onSubmit }) {
 
     setScopeLoading(true);
     try {
-      const payload = { ...form, company_id: selectedCompany || undefined };
+      // If "Others" is selected, don't send company_id (allows LLM to generate roles)
+      const companyId = selectedCompany === "others" ? null : (selectedCompany || undefined);
+      const payload = { ...form, company_id: companyId };
       const { projectId, scope, redirectUrl } = await createProjectWithScope(payload);
 
       if (onSubmit) onSubmit({ project_id: projectId, scope, redirect_url: redirectUrl });
@@ -272,7 +274,9 @@ export default function ProjectForm({ onSubmit }) {
 
     try {
       setQuestionLoading(true);
-      const payload = { ...form, company_id: selectedCompany || undefined };
+      // If "Others" is selected, don't send company_id (allows LLM to generate roles)
+      const companyId = selectedCompany === "others" ? null : (selectedCompany || undefined);
+      const payload = { ...form, company_id: companyId };
 
       // create project first
       const { projectId } = await createProject(payload);
@@ -711,6 +715,7 @@ export default function ProjectForm({ onSubmit }) {
               {c.name === "Sigmoid" ? "Sigmoid (Standard Rate Cards)" : c.name}
             </option>
           ))}
+          <option value="others">Others (LLM-Generated Roles)</option>
         </select>
       </div>
 
