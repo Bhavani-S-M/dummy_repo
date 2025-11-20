@@ -1807,109 +1807,118 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
         logger.warning(f"Rate map fallback due to error: {e}")
         ROLE_RATE_MAP_DYNAMIC = ROLE_RATE_MAP
 
-    # --- ENFORCE RATE CARD ROLES: Map LLM-generated roles to actual rate card roles ---
+    # --- ENFORCE RATE CARD ROLES: Map LLM-generated roles to actual DATABASE rate card roles ---
     if ROLE_RATE_MAP_DYNAMIC and len(ROLE_RATE_MAP_DYNAMIC) > 0:
-        # Check if this is company-specific rate card (not the default fallback)
-        rate_card_roles = set(ROLE_RATE_MAP_DYNAMIC.keys())
+        # Get the ACTUAL rate card roles from the database
+        rate_card_roles = list(ROLE_RATE_MAP_DYNAMIC.keys())
 
-        # Define role mapping rules from generic names to rate card roles
-        role_mapping = {
-            # Management
-            "Project Manager": "Technical Project Manager",
-            "Solution Architect": "Technical Lead",
-            "Technical Architect": "Technical Lead",
+        logger.info(f"📋 Rate card roles from DATABASE: {rate_card_roles}")
 
-            # Data roles
-            "Data Engineer": "SDE – Python/PySpark/AWS",
-            "Data Integration Lead": "SDE – Python/PySpark/AWS",
-            "ETL Developer": "SDE – Python/PySpark/AWS",
-            "Data Quality Analyst": "SDE – Python/PySpark/AWS",
-            "BI Developer": "SDE – Python/PySpark/AWS",
-            "BI Architect": "SDE – Python/PySpark/AWS",
-            "Data Modeler": "SDE – Python/PySpark/AWS",
-            "DAX Developer": "SDE – Python/PySpark/AWS",
+        # Function to find the BEST matching role from ACTUAL rate cards
+        def find_best_rate_card_match(llm_role: str) -> str:
+            """Find best matching role from ACTUAL database rate cards"""
+            llm_lower = llm_role.lower()
 
-            # DevOps
-            "DevOps Engineer": "DataOps/DevOps Engineer II",
-            "Azure Architect": "DataOps/DevOps Lead",
-            "BI Administrator": "DataOps Engineer",
+            # EXACT match check (case-insensitive)
+            for rc_role in rate_card_roles:
+                if llm_role == rc_role or llm_lower == rc_role.lower():
+                    return rc_role
 
-            # Development
-            "Backend Engineer": "Backend Developer",
-            "Frontend Engineer": "Frontend Developer",
+            # Keyword-based matching using ACTUAL rate card roles
+            # Project Manager types
+            if any(kw in llm_lower for kw in ["project manager", "project lead"]):
+                for rc in rate_card_roles:
+                    if "project manager" in rc.lower():
+                        return rc
 
-            # Analysis
-            "Business Analyst": "Technical Project Manager",
-            "Data Governance Specialist": "Technical Project Manager",
-            "Compliance Officer": "Technical Project Manager",
+            # Technical Lead / Solution Architect
+            if any(kw in llm_lower for kw in ["solution architect", "technical architect", "tech lead", "technical lead"]):
+                for rc in rate_card_roles:
+                    if "technical lead" in rc.lower():
+                        return rc
 
-            # Security
-            "Security Analyst": "DataOps/DevOps Lead",
-            "Azure Security Specialist": "DataOps/DevOps Lead",
+            # Data/ETL/BI roles → Look for Python/PySpark SDE roles
+            if any(kw in llm_lower for kw in ["data engineer", "data integration", "etl", "bi developer", "bi architect", "data quality", "data modeler", "dax"]):
+                for rc in rate_card_roles:
+                    if "python" in rc.lower() or "pyspark" in rc.lower():
+                        return rc
+                # Fallback to any AWS/Azure SDE
+                for rc in rate_card_roles:
+                    if "aws" in rc.lower() or "azure" in rc.lower():
+                        return rc
 
-            # Testing
-            "QA Lead": "QA Engineer",
-            "QA Tester": "QA Engineer",
-            "Performance Analyst": "QA Engineer",
+            # DevOps Engineer → Look for DataOps/DevOps Engineer II
+            if any(kw in llm_lower for kw in ["devops engineer", "dataops engineer", "bi administrator"]):
+                for rc in rate_card_roles:
+                    if "devops engineer ii" in rc.lower():
+                        return rc
+                for rc in rate_card_roles:
+                    if "dataops engineer" in rc.lower():
+                        return rc
 
-            # Design
-            "UI/UX Designer": "Design Lead – Product",
+            # DevOps Lead / Azure Architect / Security → Look for DataOps/DevOps Lead
+            if any(kw in llm_lower for kw in ["devops lead", "azure architect", "security analyst", "azure security"]):
+                for rc in rate_card_roles:
+                    if "devops lead" in rc.lower():
+                        return rc
 
-            # Documentation
-            "Technical Writer": "Technical Project Manager",
-        }
+            # Backend Developer
+            if any(kw in llm_lower for kw in ["backend developer", "backend engineer"]):
+                for rc in rate_card_roles:
+                    if "backend developer" in rc.lower():
+                        return rc
 
-        # Apply mapping to role_order
+            # Frontend Developer
+            if any(kw in llm_lower for kw in ["frontend developer", "frontend engineer"]):
+                for rc in rate_card_roles:
+                    if "frontend developer" in rc.lower():
+                        return rc
+
+            # QA/Testing
+            if any(kw in llm_lower for kw in ["qa", "test", "quality"]):
+                for rc in rate_card_roles:
+                    if "qa engineer" in rc.lower():
+                        return rc
+
+            # UI/UX/Design
+            if any(kw in llm_lower for kw in ["ui", "ux", "design"]):
+                for rc in rate_card_roles:
+                    if "design" in rc.lower():
+                        return rc
+
+            # Business Analyst → Technical Project Manager
+            if any(kw in llm_lower for kw in ["business analyst", "analyst", "writer", "documentation"]):
+                for rc in rate_card_roles:
+                    if "project manager" in rc.lower():
+                        return rc
+
+            # DEFAULT: Use first role in rate card
+            logger.warning(f"⚠️  No match for '{llm_role}', defaulting to: {rate_card_roles[0]}")
+            return rate_card_roles[0]
+
+        # Map all LLM roles to ACTUAL rate card roles
         mapped_role_order = []
         for role in role_order:
             if role in rate_card_roles:
-                # Role already matches rate card - keep it
+                # Exact match - keep it
                 mapped_role_order.append(role)
-            elif role in role_mapping and role_mapping[role] in rate_card_roles:
-                # Map to rate card role
-                mapped_role = role_mapping[role]
-                logger.info(f"  🔄 Mapped '{role}' → '{mapped_role}'")
+            else:
+                # Find best match from rate card
+                mapped_role = find_best_rate_card_match(role)
+                logger.info(f"🔄 Mapped '{role}' → '{mapped_role}'")
                 mapped_role_order.append(mapped_role)
 
-                # Update role_month_usage to use the new role name
+                # Update role_month_usage
                 if role in role_month_usage:
-                    # Merge with existing mapped role if it exists
                     if mapped_role in role_month_usage:
+                        # Merge efforts
                         for month, effort in role_month_usage[role].items():
                             role_month_usage[mapped_role][month] = role_month_usage[mapped_role].get(month, 0) + effort
                     else:
                         role_month_usage[mapped_role] = role_month_usage[role]
                     del role_month_usage[role]
-            else:
-                # No mapping found - use default mapping based on role type
-                if any(kw in role.lower() for kw in ["data", "etl", "bi", "analytics"]):
-                    default_role = "SDE – Python/PySpark/AWS"
-                elif any(kw in role.lower() for kw in ["devops", "azure", "infrastructure", "architect"]):
-                    default_role = "DataOps/DevOps Engineer II"
-                elif any(kw in role.lower() for kw in ["backend", "developer", "engineer"]):
-                    default_role = "Backend Developer"
-                elif any(kw in role.lower() for kw in ["frontend", "ui", "ux"]):
-                    default_role = "Frontend Developer"
-                elif any(kw in role.lower() for kw in ["qa", "test", "quality"]):
-                    default_role = "QA Engineer"
-                elif any(kw in role.lower() for kw in ["manager", "lead", "analyst"]):
-                    default_role = "Technical Project Manager"
-                else:
-                    default_role = "Technical Project Manager"
 
-                logger.warning(f"  ⚠️  Unmapped role '{role}' → using default '{default_role}'")
-                mapped_role_order.append(default_role)
-
-                # Update role_month_usage
-                if role in role_month_usage:
-                    if default_role in role_month_usage:
-                        for month, effort in role_month_usage[role].items():
-                            role_month_usage[default_role][month] = role_month_usage[default_role].get(month, 0) + effort
-                    else:
-                        role_month_usage[default_role] = role_month_usage[role]
-                    del role_month_usage[role]
-
-        # Remove duplicates while preserving order
+        # Remove duplicates
         seen = set()
         role_order = []
         for role in mapped_role_order:
@@ -1917,7 +1926,7 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
                 role_order.append(role)
                 seen.add(role)
 
-        logger.info(f"✅ Enforced rate card roles: {role_order}")
+        logger.info(f"✅ Final roles (ALL from rate card): {role_order}")
 
     # --- Build final resourcing plan ---
     resourcing_plan = []
