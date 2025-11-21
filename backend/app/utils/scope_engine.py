@@ -44,17 +44,22 @@ def ollama_chat(prompt: str, model: str = llm_cfg["model"], temperature: float =
             "model": model,
             "prompt": prompt,
             "temperature": temperature,
-            "stream": False
+            "stream": False,
+            "options": {
+                "num_predict": 8000,  # Allow up to 8000 tokens for scope generation
+                "temperature": temperature
+            }
         }
 
         # Force JSON format output if requested
         if format_json:
             payload["format"] = "json"
-            logger.info("🔧 Ollama JSON format enforcement ENABLED")
+            logger.info("🔧 Ollama JSON format enforcement ENABLED (max tokens: 8000)")
 
         resp = requests.post(
             f"{llm_cfg['host']}/api/generate",
             json=payload,
+            timeout=120  # Increase timeout for longer responses
         )
         resp.raise_for_status()
         data = resp.json()
