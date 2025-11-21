@@ -2015,7 +2015,10 @@ Generate activities with realistic start/end dates, proper role assignments, and
         logger.info(f"🤖 Calling Ollama for scope generation... (prompt length: {len(prompt)} chars)")
         raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt))
         logger.info(f"📝 Ollama raw response length: {len(raw_text)} chars")
-        logger.debug(f"📝 Ollama response preview (first 500 chars): {raw_text[:500]}")
+
+        # Log more of the raw response to debug parsing issues
+        logger.info(f"📝 Ollama response FIRST 1000 chars:\n{raw_text[:1000]}")
+        logger.info(f"📝 Ollama response LAST 1000 chars:\n{raw_text[-1000:]}")
 
         if not raw_text or len(raw_text.strip()) < 50:
             logger.error(f"❌ Ollama returned empty or too short response: {len(raw_text)} chars")
@@ -2026,6 +2029,17 @@ Generate activities with realistic start/end dates, proper role assignments, and
             return {}
 
         raw = _extract_json(raw_text)
+
+        # Log what was extracted
+        logger.info(f"✅ Extracted JSON keys: {list(raw.keys()) if isinstance(raw, dict) else 'NOT A DICT'}")
+        if isinstance(raw, dict):
+            logger.info(f"   - overview: {'present' if raw.get('overview') else 'MISSING'}")
+            logger.info(f"   - activities: {len(raw.get('activities', []))} items")
+            logger.info(f"   - resourcing_plan: {'present (will be auto-generated)' if 'resourcing_plan' in raw else 'not in raw'}")
+            logger.info(f"   - project_summary: {'present' if raw.get('project_summary') else 'MISSING'}")
+        else:
+            logger.error(f"❌ Extracted result is not a dict! Type: {type(raw)}, Value: {raw}")
+            return {}
 
         # Validate that LLM actually generated content, not just structure
         if raw.get('activities'):
@@ -2045,6 +2059,9 @@ Generate activities with realistic start/end dates, proper role assignments, and
                 logger.error("   2. Model is loaded: ollama list")
                 logger.error("   3. Sufficient memory available")
                 return {}
+        else:
+            logger.warning(f"⚠️ NO activities found in extracted JSON! This is a problem.")
+            logger.warning(f"   Raw JSON structure: {json.dumps(raw, indent=2)[:500]}")
 
         cleaned_scope = await clean_scope(db, raw, project=project)
         # Update project fields from generated overview (just like finalize_scope)
