@@ -116,6 +116,81 @@ def _repair_json(text: str) -> str:
     return text
 
 
+def _normalize_activity_fields(act: dict, activity_id: int) -> dict:
+    """
+    Normalize activity field names to match expected schema.
+    Handles various field name variations from LLM.
+    """
+    from datetime import datetime, timedelta
+
+    # Map various field name variations to expected field names
+    activity_name = (
+        act.get('Activities', '') or
+        act.get('name', '') or
+        act.get('activity', '') or
+        act.get('Activity', '')
+    )
+
+    description = (
+        act.get('Description', '') or
+        act.get('description', '') or
+        activity_name  # Fallback to activity name
+    )
+
+    owner = (
+        act.get('Owner', '') or
+        act.get('owner', '') or
+        act.get('responsible', '') or
+        act.get('assignee', '') or
+        "Backend Developer"  # Default fallback
+    )
+
+    resources = act.get('Resources', '') or act.get('resources', '')
+    if isinstance(resources, list):
+        resources = ", ".join(resources)
+
+    start_date = (
+        act.get('Start Date', '') or
+        act.get('start_date', '') or
+        act.get('startDate', '')
+    )
+
+    end_date = (
+        act.get('End Date', '') or
+        act.get('end_date', '') or
+        act.get('endDate', '')
+    )
+
+    # Handle effort/duration in various forms
+    effort_months = (
+        act.get('Effort Months', 0) or
+        act.get('effort_months', 0) or
+        act.get('effortMonths', 0) or
+        act.get('duration', 0) or
+        act.get('story_points', 0) / 20.0  # Convert story points to months (rough estimate)
+    )
+
+    if not effort_months or effort_months <= 0:
+        effort_months = 1.0
+
+    # If no dates provided, calculate from today
+    if not start_date:
+        start = datetime.today() + timedelta(days=(activity_id - 1) * 7)
+        start_date = start.strftime("%Y-%m-%d")
+        end_date = (start + timedelta(days=int(effort_months * 30))).strftime("%Y-%m-%d")
+
+    return {
+        "ID": activity_id,
+        "Activities": activity_name,
+        "Description": description,
+        "Owner": owner,
+        "Resources": resources,
+        "Start Date": start_date,
+        "End Date": end_date,
+        "Effort Months": float(effort_months)
+    }
+
+
 def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
     """
     Transform LLM's nested schema (with phases containing activities)
@@ -135,9 +210,37 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
       "resourcing_plan": []
     }
     """
-    # If already in correct format, return as-is
+    # Check if already in flat format but need field normalization
     if raw.get('overview') and raw.get('activities'):
-        logger.info("✅ JSON already in correct flat format")
+        logger.info("✅ JSON has flat structure, checking field names...")
+        # Normalize activity field names even if structure is correct
+        activities = raw.get('activities', [])
+        if activities and isinstance(activities, list):
+            normalized_activities = []
+            for idx, act in enumerate(activities, 1):
+                if isinstance(act, dict):
+                    normalized = _normalize_activity_fields(act, idx)
+                    # Check if normalization was needed
+                    if 'Activities' not in act or 'Owner' not in act:
+                        logger.info(f"🔧 Normalized activity {idx} field names")
+                    normalized_activities.append(normalized)
+                elif isinstance(act, str):
+                    # Handle string activities
+                    normalized_activities.append({
+                        "ID": idx,
+                        "Activities": act,
+                        "Description": act,
+                        "Owner": "Backend Developer",
+                        "Resources": "",
+                        "Start Date": "",
+                        "End Date": "",
+                        "Effort Months": 1.0
+                    })
+
+            if normalized_activities:
+                raw['activities'] = normalized_activities
+                logger.info(f"✅ Normalized {len(normalized_activities)} activities")
+
         return raw
 
     # Check if data is wrapped in a "data" key - unwrap it
