@@ -152,14 +152,31 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
 
     logger.info("🔄 Transforming nested JSON schema to flat format...")
 
+    # Helper function to safely extract string values from potentially nested dicts
+    def safe_extract(key: str, default=''):
+        """Extract value, handling both string and nested dict cases."""
+        val = raw.get(key, default)
+        if isinstance(val, dict):
+            # If it's a dict, try to extract 'name' or the key itself
+            return val.get('name', '') or val.get(key, default)
+        return val or default
+
     # Build overview from top-level fields
+    # Handle case where 'project' might be a dict with nested fields
+    project_val = raw.get('project', '')
+    if isinstance(project_val, dict):
+        project_name = project_val.get('name', '') or getattr(project, 'name', '')
+        logger.info(f"📋 Extracted project name from nested dict: {project_name}")
+    else:
+        project_name = project_val or getattr(project, 'name', '')
+
     overview = {
-        "Project Name": raw.get('project', '') or getattr(project, 'name', ''),
-        "Domain": raw.get('domain', '') or getattr(project, 'domain', ''),
-        "Complexity": raw.get('complexity', '') or getattr(project, 'complexity', ''),
-        "Tech Stack": raw.get('tech_stack', '') or getattr(project, 'tech_stack', ''),
-        "Use Cases": raw.get('use_cases', '') or getattr(project, 'use_cases', ''),
-        "Compliance": raw.get('compliance', '') or getattr(project, 'compliance', ''),
+        "Project Name": project_name,
+        "Domain": safe_extract('domain', getattr(project, 'domain', '')),
+        "Complexity": safe_extract('complexity', getattr(project, 'complexity', '')),
+        "Tech Stack": safe_extract('tech_stack', getattr(project, 'tech_stack', '')),
+        "Use Cases": safe_extract('use_cases', getattr(project, 'use_cases', '')),
+        "Compliance": safe_extract('compliance', getattr(project, 'compliance', '')),
         "Duration": raw.get('duration', 0) or getattr(project, 'duration', 0)
     }
 
@@ -699,6 +716,10 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "Use the RFP/project text as the **primary source** \n"
         "Use questions and answers to clarify ambiguities.\n"
         "but enrich missing fields with the Knowledge Base context (if relevant).\n\n"
+        "⚠️ MANDATORY REQUIREMENT: You MUST generate a complete 'activities' array with at least 8-15 activities.\n"
+        "❌ DO NOT generate empty activities array - this is UNACCEPTABLE.\n"
+        "❌ DO NOT return ONLY metadata without activities - this is a CRITICAL ERROR.\n"
+        "✅ The 'activities' array is THE MOST IMPORTANT part of your response.\n\n"
         "Output schema (YOUR ENTIRE RESPONSE MUST MATCH THIS EXACT FORMAT):\n"
         "{\n"
         '  "overview": {\n'
@@ -730,6 +751,13 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         '    "risks_and_mitigation": [string]\n'
         "  }\n"
         "}\n\n"
+        "⚠️ CRITICAL: The 'activities' array MUST contain at least 8-15 detailed activities covering ALL project phases:\n"
+        "   - Requirements gathering, analysis, and planning activities\n"
+        "   - Design and architecture activities\n"
+        "   - Development activities (broken down by feature/module)\n"
+        "   - Testing activities (unit, integration, UAT)\n"
+        "   - Deployment and go-live activities\n"
+        "   - Post-deployment support activities\n\n"
         "**Project Summary Guidelines:**\n"
         "- `executive_summary`: 2-3 paragraph high-level summary of project goals, scope, and expected outcomes\n"
         "- `key_deliverables`: List 5-8 major deliverables (e.g., 'Fully functional mobile app', 'REST API with documentation')\n"
@@ -932,6 +960,17 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         f"Use these answers to override or clarify any ambiguous or conflicting information.\n"
         f"Do NOT hallucinate beyond these facts.\n\n"
         f"{questions_context}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🚨 FINAL CRITICAL REQUIREMENTS - READ THIS CAREFULLY:\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "1. ✅ MUST include 'overview' object with all 7 fields\n"
+        "2. ✅ MUST include 'activities' array with at least 8-15 activities (THIS IS MANDATORY!)\n"
+        "3. ✅ MUST include 'resourcing_plan' as empty array []\n"
+        "4. ✅ MUST include 'project_summary' object with all 4 fields\n"
+        "5. ❌ DO NOT return only metadata without activities\n"
+        "6. ❌ DO NOT nest activities inside 'phases' - put them directly in 'activities' array\n"
+        "7. ❌ DO NOT wrap the response in 'data' or 'project' keys - use the exact schema above\n"
+        "8. 🎯 Your response MUST be valid JSON that starts with '{' and ends with '}'\n\n"
         "REMEMBER: Output ONLY the JSON object. No explanations, no thinking, no markdown, no prose. Start your response with '{' and end with '}'. Nothing else.\n"
     )
 
