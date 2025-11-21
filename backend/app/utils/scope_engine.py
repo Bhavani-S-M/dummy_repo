@@ -140,8 +140,13 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
         logger.info("✅ JSON already in correct flat format")
         return raw
 
-    # Check if it's in nested format (has 'phases' or 'project' at root level)
-    if not (raw.get('phases') or raw.get('project')):
+    # Check if data is wrapped in a "data" key - unwrap it
+    if raw.get('data') and isinstance(raw.get('data'), dict):
+        logger.info("🔓 Unwrapping nested 'data' key...")
+        raw = raw.get('data')
+
+    # Check if it's in nested format (has 'phases' or 'project' at root level, or activities inside)
+    if not (raw.get('phases') or raw.get('project') or raw.get('activities')):
         logger.warning("⚠️ JSON format unclear - returning as-is")
         return raw
 
@@ -158,23 +163,74 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
         "Duration": raw.get('duration', 0) or getattr(project, 'duration', 0)
     }
 
-    # Extract and flatten activities from nested phases
+    # Extract and flatten activities
+    # Handle both:
+    # 1. Activities nested in phases: {"phases": [{"activities": [...]}]}
+    # 2. Activities directly in raw: {"activities": [...]}
     activities = []
     activity_id = 1
 
+    # First check if activities are in phases
     phases = raw.get('phases', [])
-    for phase in phases:
-        phase_name = phase.get('name', 'Unnamed Phase')
-        phase_activities = phase.get('activities', [])
+    if phases:
+        for phase in phases:
+            phase_name = phase.get('name', 'Unnamed Phase')
+            phase_activities = phase.get('activities', [])
 
-        for act in phase_activities:
-            # Handle both string and dict activities
+            for act in phase_activities:
+                # Handle both string and dict activities
+                if isinstance(act, str):
+                    # Activity is just a string description
+                    flat_activity = {
+                        "ID": activity_id,
+                        "Activities": act,
+                        "Description": act,  # Use same string for description
+                        "Owner": "Backend Developer",
+                        "Resources": "",
+                        "Start Date": "",
+                        "End Date": "",
+                        "Effort Months": 1.0
+                    }
+                elif isinstance(act, dict):
+                    # Activity is a dict with structured fields
+                    flat_activity = {
+                        "ID": activity_id,
+                        "Activities": act.get('name', '') or act.get('activity', ''),
+                        "Description": act.get('description', ''),
+                        "Owner": act.get('owner', '') or act.get('responsible', '') or "Backend Developer",
+                        "Resources": ", ".join(act.get('resources', [])) if isinstance(act.get('resources'), list) else act.get('resources', ''),
+                        "Start Date": act.get('start_date', '') or act.get('startDate', ''),
+                        "End Date": act.get('end_date', '') or act.get('endDate', ''),
+                        "Effort Months": act.get('effort_months', 0) or act.get('effortMonths', 0) or 1.0
+                    }
+                else:
+                    # Skip invalid activity types
+                    logger.warning(f"⚠️ Skipping invalid activity type: {type(act)}")
+                    continue
+
+                # If no start/end dates, calculate from today
+                if not flat_activity["Start Date"]:
+                    from datetime import datetime, timedelta
+                    start = datetime.today() + timedelta(days=(activity_id - 1) * 7)
+                    flat_activity["Start Date"] = start.strftime("%Y-%m-%d")
+                    flat_activity["End Date"] = (start + timedelta(days=30)).strftime("%Y-%m-%d")
+                    flat_activity["Effort Months"] = 1.0
+
+                activities.append(flat_activity)
+                activity_id += 1
+
+        logger.info(f"✅ Extracted {len(activities)} activities from {len(phases)} phases")
+
+    # If no phases, check if activities are directly at root level
+    elif raw.get('activities'):
+        logger.info("📋 Found activities directly at root level")
+        for act in raw.get('activities', []):
+            # Same handling as above
             if isinstance(act, str):
-                # Activity is just a string description
                 flat_activity = {
                     "ID": activity_id,
                     "Activities": act,
-                    "Description": act,  # Use same string for description
+                    "Description": act,
                     "Owner": "Backend Developer",
                     "Resources": "",
                     "Start Date": "",
@@ -182,7 +238,6 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
                     "Effort Months": 1.0
                 }
             elif isinstance(act, dict):
-                # Activity is a dict with structured fields
                 flat_activity = {
                     "ID": activity_id,
                     "Activities": act.get('name', '') or act.get('activity', ''),
@@ -194,7 +249,6 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
                     "Effort Months": act.get('effort_months', 0) or act.get('effortMonths', 0) or 1.0
                 }
             else:
-                # Skip invalid activity types
                 logger.warning(f"⚠️ Skipping invalid activity type: {type(act)}")
                 continue
 
@@ -209,7 +263,7 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
             activities.append(flat_activity)
             activity_id += 1
 
-    logger.info(f"✅ Extracted {len(activities)} activities from {len(phases)} phases")
+        logger.info(f"✅ Extracted {len(activities)} activities from root level")
 
     # Build transformed structure
     transformed = {
