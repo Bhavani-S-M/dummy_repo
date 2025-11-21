@@ -73,19 +73,77 @@ def _strip_code_fences(s: str) -> str:
     m = re.search(r"```(?:json)?(.*?)```", s, flags=re.DOTALL | re.IGNORECASE)
     return m.group(1) if m else s
 
+def _repair_json(text: str) -> str:
+    """Attempt to fix common JSON syntax errors."""
+    import re
+
+    # Remove trailing commas before closing braces/brackets
+    text = re.sub(r',\s*([}\]])', r'\1', text)
+
+    # Fix missing commas between object elements (}{)
+    text = re.sub(r'}\s*{', r'},{', text)
+
+    # Fix missing commas between array elements (][)
+    text = re.sub(r']\s*\[', r'],[', text)
+
+    # Fix missing commas between object properties (common LLM error)
+    # Match: "key": "value"<newline>"nextkey": where comma is missing
+    text = re.sub(r'("\s*)\n\s*(")', r'\1,\n\2', text)
+
+    # Fix unquoted keys (capture word followed by colon, add quotes)
+    # Only match at start of line or after { or , to avoid false positives
+    text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', text)
+
+    return text
+
+
 def _extract_json(s: str) -> dict:
     raw = _strip_code_fences(s or "")
     try:
-        return json.loads(raw.strip())
-    except Exception:
+        parsed = json.loads(raw.strip())
+        # If Ollama returns a list at root level, check if it's activities
+        if isinstance(parsed, list):
+            logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+            return {"activities": parsed}
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception as e:
+        logger.warning(f"⚠️  First JSON parse attempt failed: {str(e)}")
+        logger.warning(f"   Trying to extract JSON from braces...")
         start, end = raw.find("{"), raw.rfind("}")
         if start >= 0 and end > start:
             try:
-                return json.loads(raw[start:end+1])
-            except Exception:
-                return {}
+                extracted = raw[start:end+1]
+                logger.info(f"   Extracted JSON length: {len(extracted)} chars")
+                logger.info(f"   Extracted JSON preview (first 300 chars): {extracted[:300]}")
+                logger.info(f"   Extracted JSON ending (last 200 chars): {extracted[-200:]}")
+                parsed = json.loads(extracted)
+                if isinstance(parsed, list):
+                    logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+                    return {"activities": parsed}
+                logger.info(f"✅ Successfully parsed JSON with {len(parsed)} top-level keys: {list(parsed.keys())}")
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception as e2:
+                logger.warning(f"⚠️  Second JSON parse attempt also failed: {str(e2)}")
+                logger.warning(f"   Attempting JSON repair...")
+                try:
+                    # Try to repair common JSON syntax errors
+                    repaired = _repair_json(extracted)
+                    logger.info(f"   Repaired JSON preview (first 300 chars): {repaired[:300]}")
+                    logger.info(f"   Repaired JSON ending (last 200 chars): {repaired[-200:]}")
+                    parsed = json.loads(repaired)
+                    if isinstance(parsed, list):
+                        logger.warning(f"⚠️  Ollama returned a list instead of dict. Wrapping in activities key.")
+                        return {"activities": parsed}
+                    logger.info(f"✅ Successfully parsed repaired JSON with {len(parsed)} top-level keys: {list(parsed.keys())}")
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception as e3:
+                    logger.error(f"❌ JSON repair also failed: {str(e3)}")
+                    logger.error(f"   Raw text length: {len(raw)} chars")
+                    logger.error(f"   Raw text preview (first 300 chars): {raw[:300]}")
+                    logger.error(f"   Raw text ending (last 200 chars): {raw[-200:]}")
+                    return {}
         return {}
-    
+
 
 
 def _parse_date_safe(val: Any, fallback: datetime = None) -> datetime:
@@ -98,7 +156,58 @@ def _parse_date_safe(val: Any, fallback: datetime = None) -> datetime:
         return fallback
 
 def _safe_str(val: Any) -> str:
-    return str(val).strip() if val is not None else ""
+    """Convert value to string, handling arrays and dictionaries by joining them."""
+    if val is None:
+        return ""
+
+    # If it's a dictionary, extract all values and flatten them
+    if isinstance(val, dict):
+        all_values = []
+        for v in val.values():
+            if isinstance(v, list):
+                all_values.extend(v)
+            elif v:
+                all_values.append(str(v))
+        return ", ".join(str(item).strip() for item in all_values if item)
+
+    # If it's a list/array, join with commas
+    if isinstance(val, list):
+        return ", ".join(str(item).strip() for item in val if item)
+
+    # Check if it's a string representation of an array like "['item1', 'item2']"
+    if isinstance(val, str) and val.strip().startswith('[') and val.strip().endswith(']'):
+        try:
+            import json
+            parsed = json.loads(val.replace("'", '"'))  # Convert single quotes to double quotes for JSON
+            if isinstance(parsed, list):
+                return ", ".join(str(item).strip() for item in parsed if item)
+        except:
+            # If JSON parsing fails, try Python literal eval
+            try:
+                import ast
+                parsed = ast.literal_eval(val)
+                if isinstance(parsed, list):
+                    return ", ".join(str(item).strip() for item in parsed if item)
+            except:
+                pass  # If both fail, return as-is below
+
+    # Check if it's a string representation of a dict like "{'key': ['val1', 'val2']}"
+    if isinstance(val, str) and val.strip().startswith('{') and val.strip().endswith('}'):
+        try:
+            import ast
+            parsed = ast.literal_eval(val)
+            if isinstance(parsed, dict):
+                all_values = []
+                for v in parsed.values():
+                    if isinstance(v, list):
+                        all_values.extend(v)
+                    elif v:
+                        all_values.append(str(v))
+                return ", ".join(str(item).strip() for item in all_values if item)
+        except:
+            pass  # If parsing fails, return as-is below
+
+    return str(val).strip()
 
 async def get_rate_map_for_project(db: AsyncSession, project) -> Dict[str, float]:
     """
@@ -307,9 +416,18 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
             with_payload=True
         )
 
+        logger.info(f"🔍 Searching knowledge base (Qdrant) - found {len(results)} results")
+
         hits = []
         for r in results:
             payload = r.payload or {}
+            file_name = payload.get("file_name", "unknown")
+            chunk_index = payload.get("chunk_index", "?")
+            score = r.score
+
+            # Log each result with details
+            logger.info(f"   📄 {file_name} (chunk {chunk_index}): similarity {score:.3f}")
+
             hits.append({
                 "id": payload.get("chunk_id", str(r.id)),
                 "parent_id": payload.get("parent_id"),
