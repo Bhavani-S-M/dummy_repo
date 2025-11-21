@@ -168,17 +168,35 @@ def _transform_nested_to_flat_schema(raw: dict, project) -> dict:
         phase_activities = phase.get('activities', [])
 
         for act in phase_activities:
-            # Convert nested activity format to flat format
-            flat_activity = {
-                "ID": activity_id,
-                "Activities": act.get('name', '') or act.get('activity', ''),
-                "Description": act.get('description', ''),
-                "Owner": act.get('owner', '') or act.get('responsible', '') or "Backend Developer",
-                "Resources": ", ".join(act.get('resources', [])) if isinstance(act.get('resources'), list) else act.get('resources', ''),
-                "Start Date": act.get('start_date', '') or act.get('startDate', ''),
-                "End Date": act.get('end_date', '') or act.get('endDate', ''),
-                "Effort Months": act.get('effort_months', 0) or act.get('effortMonths', 0) or 1.0
-            }
+            # Handle both string and dict activities
+            if isinstance(act, str):
+                # Activity is just a string description
+                flat_activity = {
+                    "ID": activity_id,
+                    "Activities": act,
+                    "Description": act,  # Use same string for description
+                    "Owner": "Backend Developer",
+                    "Resources": "",
+                    "Start Date": "",
+                    "End Date": "",
+                    "Effort Months": 1.0
+                }
+            elif isinstance(act, dict):
+                # Activity is a dict with structured fields
+                flat_activity = {
+                    "ID": activity_id,
+                    "Activities": act.get('name', '') or act.get('activity', ''),
+                    "Description": act.get('description', ''),
+                    "Owner": act.get('owner', '') or act.get('responsible', '') or "Backend Developer",
+                    "Resources": ", ".join(act.get('resources', [])) if isinstance(act.get('resources'), list) else act.get('resources', ''),
+                    "Start Date": act.get('start_date', '') or act.get('startDate', ''),
+                    "End Date": act.get('end_date', '') or act.get('endDate', ''),
+                    "Effort Months": act.get('effort_months', 0) or act.get('effortMonths', 0) or 1.0
+                }
+            else:
+                # Skip invalid activity types
+                logger.warning(f"⚠️ Skipping invalid activity type: {type(act)}")
+                continue
 
             # If no start/end dates, calculate from today
             if not flat_activity["Start Date"]:
