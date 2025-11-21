@@ -30,12 +30,31 @@ llm_cfg = get_llm_client()
 embed_cfg = get_embed_client()
 qdrant = get_qdrant_client()
 
-def ollama_chat(prompt: str, model: str = llm_cfg["model"], temperature: float = 0.7) -> str:
-    """Call Ollama to generate text from a prompt."""
+def ollama_chat(prompt: str, model: str = llm_cfg["model"], temperature: float = 0.7, format_json: bool = False) -> str:
+    """Call Ollama to generate text from a prompt.
+
+    Args:
+        prompt: The prompt to send to Ollama
+        model: The model to use (default from config)
+        temperature: Sampling temperature (default 0.7)
+        format_json: If True, forces Ollama to return valid JSON (default False)
+    """
     try:
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "temperature": temperature,
+            "stream": False
+        }
+
+        # Force JSON format output if requested
+        if format_json:
+            payload["format"] = "json"
+            logger.info("🔧 Ollama JSON format enforcement ENABLED")
+
         resp = requests.post(
             f"{llm_cfg['host']}/api/generate",
-            json={"model": model, "prompt": prompt, "temperature": temperature, "stream": False},
+            json=payload,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -507,12 +526,13 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
     today_str = datetime.today().date().isoformat()
 
     return (
+        "CRITICAL INSTRUCTION: You MUST output ONLY valid JSON. Do NOT include any explanations, commentary, thinking process, or markdown.\n"
+        "Do NOT start with 'Okay' or 'Here is' or any prose. Your ENTIRE response must be valid JSON and nothing else.\n\n"
         "You are an expert AI project planner.\n"
         "Use the RFP/project text as the **primary source** \n"
         "Use questions and answers to clarify ambiguities.\n"
-        "but enrich missing fields with the Knowledge Base context (if relevant).\n"
-        "Return ONLY valid JSON (no prose, no markdown, no commentary).\n\n"
-        "Output schema:\n"
+        "but enrich missing fields with the Knowledge Base context (if relevant).\n\n"
+        "Output schema (YOUR ENTIRE RESPONSE MUST MATCH THIS EXACT FORMAT):\n"
         "{\n"
         '  "overview": {\n'
         '    "Project Name": string,\n'
@@ -744,7 +764,8 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         f"Clarification Q&A (User-confirmed answers take highest priority)\n"
         f"Use these answers to override or clarify any ambiguous or conflicting information.\n"
         f"Do NOT hallucinate beyond these facts.\n\n"
-        f"{questions_context}\n"
+        f"{questions_context}\n\n"
+        "REMEMBER: Output ONLY the JSON object. No explanations, no thinking, no markdown, no prose. Start your response with '{' and end with '}'. Nothing else.\n"
     )
 
 
@@ -2011,9 +2032,9 @@ Generate activities with realistic start/end dates, proper role assignments, and
     # ---------- Build + query ----------
     prompt = _build_scope_prompt(rfp_text, kb_chunks, project, questions_context=questions_context)
     try:
-        # Step 1: Generate scope via Ollama
+        # Step 1: Generate scope via Ollama with JSON format enforcement
         logger.info(f"🤖 Calling Ollama for scope generation... (prompt length: {len(prompt)} chars)")
-        raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt))
+        raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt, format_json=True))
         logger.info(f"📝 Ollama raw response length: {len(raw_text)} chars")
 
         # Log more of the raw response to debug parsing issues
@@ -2327,10 +2348,10 @@ Return only the updated JSON.
 """
 
 
-    # ---- Query Ollama creatively ----
+    # ---- Query Ollama creatively with JSON enforcement ----
     # Use lower temperature for more consistent instruction-following
     try:
-        raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt, temperature=0.2))
+        raw_text = await anyio.to_thread.run_sync(lambda: ollama_chat(prompt, temperature=0.2, format_json=True))
         logger.info(f"🤖 LLM response length: {len(raw_text)} chars")
         logger.debug(f"LLM raw response (first 500 chars): {raw_text[:500]}")
         updated_scope = _extract_json(raw_text)
