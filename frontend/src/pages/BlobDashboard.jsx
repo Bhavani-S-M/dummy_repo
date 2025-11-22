@@ -1,6 +1,7 @@
 // BlobDashboard.jsx
 import { useEffect, useState } from "react";
 import { useBlobs } from "../contexts/BlobContext";
+import { toast } from "react-toastify";
 import {
   Upload,
   Folder,
@@ -222,9 +223,18 @@ export default function BlobDashboard() {
                 onChange={async (e) => {
                   const f = e.target.files[0];
                   if (f) {
-                    // Upload to case_study folder
-                    await uploadFile(f, "case_study", activeBase);
-                    await loadExplorer(activeBase);
+                    try {
+                      toast.info(`Uploading case study: ${f.name}...`);
+                      // Upload to case_study folder
+                      await uploadFile(f, "case_study", activeBase);
+                      await loadExplorer(activeBase);
+                      toast.success(`✓ Case study "${f.name}" uploaded successfully! Processing will begin shortly.`);
+                    } catch (error) {
+                      console.error("Failed to upload case study:", error);
+                      toast.error(`Failed to upload case study: ${error.message || 'Unknown error'}`);
+                    }
+                    // Reset input to allow re-uploading the same file
+                    e.target.value = '';
                   }
                 }}
               />
