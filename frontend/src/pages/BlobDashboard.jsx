@@ -226,19 +226,27 @@ export default function BlobDashboard() {
                     const toastId = `case-study-${Date.now()}`;
                     try {
                       // Step 1: Upload
-                      toast.info(`📤 Uploading case study: ${f.name}...`, { toastId, autoClose: false });
+                      toast.info(`📤 Uploading case study: ${f.name}...`, {
+                        toastId,
+                        autoClose: false,
+                        containerId: "root-toaster"
+                      });
                       await uploadFile(f, "case_study", activeBase);
 
                       // Step 2: File uploaded
                       toast.update(toastId, {
                         render: `✓ File uploaded: ${f.name}`,
                         type: "success",
-                        autoClose: 2000
+                        autoClose: 2000,
+                        containerId: "root-toaster"
                       });
 
                       // Step 3: Show processing message
                       setTimeout(() => {
-                        toast.info(`⚙️ Processing case study: Extracting text and generating embeddings...`, { autoClose: 3000 });
+                        toast.info(`⚙️ Processing case study: Extracting text and generating embeddings...`, {
+                          autoClose: 3000,
+                          containerId: "root-toaster"
+                        });
                       }, 500);
 
                       // Step 4: Refresh file tree
@@ -246,7 +254,10 @@ export default function BlobDashboard() {
 
                       // Step 5: Final success
                       setTimeout(() => {
-                        toast.success(`✅ Case study "${f.name}" is being processed! It will be available for matching shortly.`, { autoClose: 5000 });
+                        toast.success(`✅ Case study "${f.name}" is being processed! It will be available for matching shortly.`, {
+                          autoClose: 5000,
+                          containerId: "root-toaster"
+                        });
                       }, 1000);
 
                     } catch (error) {
@@ -254,7 +265,8 @@ export default function BlobDashboard() {
                       toast.update(toastId, {
                         render: `❌ Upload failed: ${error.message || 'Unknown error'}`,
                         type: "error",
-                        autoClose: 5000
+                        autoClose: 5000,
+                        containerId: "root-toaster"
                       });
                     }
                     // Reset input to allow re-uploading the same file
