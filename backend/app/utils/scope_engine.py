@@ -768,7 +768,7 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
         logger.warning(f"RAG retrieval (Qdrant) failed: {e}")
         return []
 
-def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, questions_context: str | None = None) -> str:
+def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, questions_context: str | None = None, rate_card_roles: List[str] | None = None) -> str:
     import tiktoken
 
     # Tokenizer
@@ -891,24 +891,27 @@ def _build_scope_prompt(rfp_text: str, kb_chunks: List[str], project=None, quest
         "- Distinguish `Owner` (responsible lead role) and `Resources` (supporting roles)."
         "\n"
         "**Critical: Owner and Resources Assignment Rules:**\n"
-        "- `Owner` must ALWAYS be a valid JOB ROLE from the company's rate card (e.g., Backend Developer, Solution Architect, Data Engineer, DevOps Engineer, etc.).\n"
+        "- `Owner` must ALWAYS be a valid JOB ROLE from the company's rate card.\n"
         "- `Owner` is NEVER an activity name, activity description, or task name.\n"
         "- `Resources` must contain only valid JOB ROLES from the company's rate card.\n"
-        "- Use roles that match the company's rate card exactly (these are dynamically provided based on company).\n"
+        "- You MUST use ONLY the roles listed below - DO NOT invent new roles.\n"
         "- If `Resources` is missing, fallback to the same `Owner` role.\n"
         "- Use less resources as much as possible.\n"
         "\n"
+        f"**🔴 MANDATORY: Use ONLY these exact roles from the company's rate card:**\n"
+        f"{chr(10).join('  - ' + role for role in (rate_card_roles or []))}\n"
+        "\n"
         "**Examples of CORRECT Owner assignment:**\n"
-        "  ✓ Owner: \"Azure Architect\" (this is a role)\n"
-        "  ✓ Owner: \"Backend Developer\" (this is a role)\n"
-        "  ✓ Owner: \"Data Engineer\" (this is a role)\n"
-        "  ✓ Owner: \"DevOps Engineer\" (this is a role)\n"
+        f"  ✓ Owner: \"{rate_card_roles[0] if rate_card_roles else 'Backend Developer'}\" (this is a role from the rate card)\n"
+        f"  ✓ Owner: \"{rate_card_roles[1] if len(rate_card_roles) > 1 else 'Data Engineer'}\" (this is a role from the rate card)\n"
+        f"  ✓ Owner: \"{rate_card_roles[2] if len(rate_card_roles) > 2 else 'Solution Architect'}\" (this is a role from the rate card)\n"
         "\n"
         "**Examples of INCORRECT Owner assignment (DO NOT DO THIS):**\n"
         "  ✗ Owner: \"Infrastructure Setup\" (this is an activity, not a role!)\n"
         "  ✗ Owner: \"Data Ingestion Development\" (this is an activity, not a role!)\n"
         "  ✗ Owner: \"Source Analysis\" (this is an activity, not a role!)\n"
         "  ✗ Owner: \"John Smith\" (this is a person's name, not a role!)\n"
+        "  ✗ Owner: \"Project Manager\" (this role is NOT in the company's rate card!)\n"
         "\n"
         "Activity Duration Guidelines:\n"
         "Estimate realistic durations based on activity type and complexity. Use these as reference:\n"
@@ -2342,11 +2345,18 @@ Generate activities with realistic start/end dates, proper role assignments, and
         logger.warning(f" Could not include questions.json context: {e}")
         questions_context = None
 
-    
-
+    # ---------- Fetch company rate card roles ----------
+    rate_card_roles = []
+    try:
+        rate_map = await get_rate_map_for_project(db, project)
+        rate_card_roles = list(rate_map.keys())
+        logger.info(f"📋 Fetched {len(rate_card_roles)} roles from company rate card: {', '.join(rate_card_roles[:10])}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not fetch rate card roles: {e}")
+        rate_card_roles = list(ROLE_RATE_MAP.keys())
 
     # ---------- Build + query ----------
-    prompt = _build_scope_prompt(rfp_text, kb_chunks, project, questions_context=questions_context)
+    prompt = _build_scope_prompt(rfp_text, kb_chunks, project, questions_context=questions_context, rate_card_roles=rate_card_roles)
     try:
         # Step 1: Generate scope via Ollama with JSON format enforcement
         logger.info(f"🤖 Calling Ollama for scope generation... (prompt length: {len(prompt)} chars)")
