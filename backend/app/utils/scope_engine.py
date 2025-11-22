@@ -1437,6 +1437,8 @@ def _build_architecture_prompt(rfp_text: str, kb_chunks: List[str], project=None
     - **NO** sentences like "Based on the analysis..." or "Here is the code..."
     - **NO** C-style comments (//) - DOT does not support them! Use # or /* */ if needed
     - **NO** escaped quotes (\") - Use plain quotes in attribute values
+    - **IMPORTANT:** Ensure all labels are complete and properly closed with quotes
+    - **IMPORTANT:** Do NOT end labels with colons (e.g., label="Database:" is WRONG, use label="Database")
     - The FIRST character of your response must be "d" (from digraph)
     - The LAST character of your response must be closing brace
 
@@ -1444,8 +1446,12 @@ def _build_architecture_prompt(rfp_text: str, kb_chunks: List[str], project=None
     Based on the analysis, here is the code:
     digraph Architecture {{ ... }}
 
+    **ALSO WRONG - Incomplete labels:**
+    SQL_DB [label="SQL Database\nTransformation:
+
     **CORRECT (Do this):**
     digraph Architecture {{ ... }}
+    SQL_DB [label="SQL Database\nTransformation"]
 
     Your response must be pure DOT code that can be directly passed to Graphviz without any processing.
     """
@@ -1901,8 +1907,26 @@ async def generate_architecture(
     # Remove control characters
     dot_code = re.sub(r"[^\x09\x0A\x0D\x20-\x7E]", "", dot_code)
 
-    # ---------- Step 3: Do NOT override GPT’s style ----------
-    # Keep GPT’s own clusters, nodes, and colors — just ensure it's syntactically valid
+    # Fix label syntax - ensure all labels are properly quoted and escaped
+    # Replace any labels that might have unescaped colons or special characters
+    def fix_label(match):
+        """Fix label syntax by properly escaping special characters."""
+        label_content = match.group(1)
+        # Remove any problematic colons at the end of labels (incomplete labels)
+        label_content = re.sub(r':\s*$', '', label_content)
+        # Escape quotes inside labels
+        label_content = label_content.replace('"', '\\"')
+        return f'label="{label_content}"'
+
+    # Fix incomplete or malformed labels
+    dot_code = re.sub(r'label="([^"]*)"?\s*(?=[;\]\}]|\n|$)', fix_label, dot_code)
+
+    # Ensure node names don't have special characters that need escaping
+    # Replace problematic node names with safe versions
+    dot_code = re.sub(r'([A-Za-z0-9_]+)\s*\[label="([^"]+):"', r'\1 [label="\2"', dot_code)
+
+    # ---------- Step 3: Do NOT override GPT's style ----------
+    # Keep GPT's own clusters, nodes, and colors — just ensure it's syntactically valid
     # (Old static preamble removed intentionally)
 
     # ---------- Step 4: Render DOT → PNG & SVG ----------
