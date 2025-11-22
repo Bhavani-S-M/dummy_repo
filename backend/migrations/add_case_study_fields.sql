@@ -46,4 +46,5 @@ UPDATE knowledge_base_documents
 SET document_type = 'general'
 WHERE document_type IS NULL;
 
-RAISE NOTICE 'Migration completed successfully!';
+-- Show completion message
+SELECT 'Migration completed successfully!' as status;
