@@ -6,9 +6,11 @@ structured information including: Client Name, Overview, Solution, and Impact.
 """
 
 import re
+import logging
 from typing import Dict, List, Optional
 from pptx import Presentation
-from app.utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 
 def parse_case_study_from_ppt(file_path: str) -> List[Dict[str, str]]:
