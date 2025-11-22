@@ -1,7 +1,6 @@
 // BlobDashboard.jsx
 import { useEffect, useState } from "react";
 import { useBlobs } from "../contexts/BlobContext";
-import { toast } from "react-toastify";
 import {
   Upload,
   Folder,
@@ -223,51 +222,14 @@ export default function BlobDashboard() {
                 onChange={async (e) => {
                   const f = e.target.files[0];
                   if (f) {
-                    const toastId = `case-study-${Date.now()}`;
                     try {
-                      // Step 1: Upload
-                      toast.info(`📤 Uploading case study: ${f.name}...`, {
-                        toastId,
-                        autoClose: false,
-                        containerId: "root-toaster"
-                      });
                       await uploadFile(f, "case_study", activeBase);
-
-                      // Step 2: File uploaded
-                      toast.update(toastId, {
-                        render: `✓ File uploaded: ${f.name}`,
-                        type: "success",
-                        autoClose: 2000,
-                        containerId: "root-toaster"
-                      });
-
-                      // Step 3: Show processing message
-                      setTimeout(() => {
-                        toast.info(`⚙️ Processing case study: Extracting text and generating embeddings...`, {
-                          autoClose: 3000,
-                          containerId: "root-toaster"
-                        });
-                      }, 500);
-
-                      // Step 4: Refresh file tree
                       await loadExplorer(activeBase);
 
-                      // Step 5: Final success
-                      setTimeout(() => {
-                        toast.success(`✅ Case study "${f.name}" is being processed! It will be available for matching shortly.`, {
-                          autoClose: 5000,
-                          containerId: "root-toaster"
-                        });
-                      }, 1000);
-
+                      alert(`✅ Case study uploaded successfully!\n\nFile: ${f.name}\n\nThe case study is now being processed:\n• Extracting text from PPT\n• Generating embeddings\n• Storing in vector database\n\nIt will be available for project matching shortly.`);
                     } catch (error) {
                       console.error("Failed to upload case study:", error);
-                      toast.update(toastId, {
-                        render: `❌ Upload failed: ${error.message || 'Unknown error'}`,
-                        type: "error",
-                        autoClose: 5000,
-                        containerId: "root-toaster"
-                      });
+                      alert(`❌ Case study upload failed!\n\nFile: ${f.name}\nError: ${error.message || 'Unknown error'}\n\nPlease try again.`);
                     }
                     // Reset input to allow re-uploading the same file
                     e.target.value = '';
