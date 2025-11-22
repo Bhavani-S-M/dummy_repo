@@ -15,6 +15,7 @@ from app.config.config import (
     QDRANT_HOST,
     QDRANT_PORT,
     QDRANT_COLLECTION,
+    CASE_STUDY_COLLECTION,
     VECTOR_DIM,
 )
 
@@ -131,13 +132,14 @@ def embed_text_ollama(texts: List[str]) -> List[List[float]]:
 # -------------------------------------------------------------------------
 @lru_cache(maxsize=1)
 def get_qdrant_client() -> QdrantClient:
-    """Initialize or reuse a Qdrant client (auto-creates collection if missing)."""
+    """Initialize or reuse a Qdrant client (auto-creates collections if missing)."""
     try:
         client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
         collections = client.get_collections().collections
         existing = [c.name for c in collections]
 
+        # Create Knowledge Base collection
         if QDRANT_COLLECTION not in existing:
             client.create_collection(
                 collection_name=QDRANT_COLLECTION,
@@ -146,9 +148,22 @@ def get_qdrant_client() -> QdrantClient:
                     distance=models.Distance.COSINE,
                 ),
             )
-            logger.info(f"✅ Created Qdrant collection '{QDRANT_COLLECTION}' ({VECTOR_DIM} dims)")
+            logger.info(f"✅ Created Qdrant collection '{QDRANT_COLLECTION}' for KB documents ({VECTOR_DIM} dims)")
         else:
-            logger.info(f"ℹ️ Qdrant collection '{QDRANT_COLLECTION}' already exists")
+            logger.debug(f"ℹ️ Qdrant collection '{QDRANT_COLLECTION}' already exists")
+
+        # Create Case Study collection (separate from KB)
+        if CASE_STUDY_COLLECTION not in existing:
+            client.create_collection(
+                collection_name=CASE_STUDY_COLLECTION,
+                vectors_config=models.VectorParams(
+                    size=VECTOR_DIM,
+                    distance=models.Distance.COSINE,
+                ),
+            )
+            logger.info(f"✅ Created Qdrant collection '{CASE_STUDY_COLLECTION}' for case studies ({VECTOR_DIM} dims)")
+        else:
+            logger.debug(f"ℹ️ Qdrant collection '{CASE_STUDY_COLLECTION}' already exists")
 
         return client
 

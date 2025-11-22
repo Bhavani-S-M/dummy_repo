@@ -722,14 +722,15 @@ def _rag_retrieve(query: str, k: int = 5) -> List[Dict]:
             return []
 
         client = get_qdrant_client()
+        # Search ONLY in KB collection (case studies are in separate collection)
         results = client.search(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=QDRANT_COLLECTION,  # KB documents only, no case studies
             query_vector=q_emb,
             limit=k,
             with_payload=True
         )
 
-        logger.info(f"🔍 Searching knowledge base (Qdrant) - found {len(results)} results")
+        logger.info(f"🔍 Searching knowledge base (Qdrant) - found {len(results)} results (KB documents only, excluding case studies)")
 
         hits = []
         for r in results:

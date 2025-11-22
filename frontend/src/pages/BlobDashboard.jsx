@@ -223,15 +223,39 @@ export default function BlobDashboard() {
                 onChange={async (e) => {
                   const f = e.target.files[0];
                   if (f) {
+                    const toastId = `case-study-${Date.now()}`;
                     try {
-                      toast.info(`Uploading case study: ${f.name}...`);
-                      // Upload to case_study folder
+                      // Step 1: Upload
+                      toast.info(`📤 Uploading case study: ${f.name}...`, { toastId, autoClose: false });
                       await uploadFile(f, "case_study", activeBase);
+
+                      // Step 2: File uploaded
+                      toast.update(toastId, {
+                        render: `✓ File uploaded: ${f.name}`,
+                        type: "success",
+                        autoClose: 2000
+                      });
+
+                      // Step 3: Show processing message
+                      setTimeout(() => {
+                        toast.info(`⚙️ Processing case study: Extracting text and generating embeddings...`, { autoClose: 3000 });
+                      }, 500);
+
+                      // Step 4: Refresh file tree
                       await loadExplorer(activeBase);
-                      toast.success(`✓ Case study "${f.name}" uploaded successfully! Processing will begin shortly.`);
+
+                      // Step 5: Final success
+                      setTimeout(() => {
+                        toast.success(`✅ Case study "${f.name}" is being processed! It will be available for matching shortly.`, { autoClose: 5000 });
+                      }, 1000);
+
                     } catch (error) {
                       console.error("Failed to upload case study:", error);
-                      toast.error(`Failed to upload case study: ${error.message || 'Unknown error'}`);
+                      toast.update(toastId, {
+                        render: `❌ Upload failed: ${error.message || 'Unknown error'}`,
+                        type: "error",
+                        autoClose: 5000
+                      });
                     }
                     // Reset input to allow re-uploading the same file
                     e.target.value = '';

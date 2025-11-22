@@ -52,5 +52,6 @@ VECTOR_DIM = int(os.getenv("VECTOR_DIM", "4096"))
 # ---------- VECTOR DATABASE / QDRANT ----------
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "knowledge_chunks")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "knowledge_chunks")  # For KB documents only
+CASE_STUDY_COLLECTION = os.getenv("CASE_STUDY_COLLECTION", "case_studies")  # For case studies only
 

@@ -393,7 +393,7 @@ async def get_related_case_study(
         - Or message indicating no match was found
     """
     from app.utils.ai_clients import embed_text_ollama, get_qdrant_client
-    from app.config.config import QDRANT_COLLECTION
+    from app.config.config import CASE_STUDY_COLLECTION
 
     # Fetch project
     db_project = await projects.get_project(db, project_id=project_id, owner_id=current_user.id)
@@ -443,21 +443,13 @@ async def get_related_case_study(
 
         query_vector = embeddings[0]
 
-        # Search Qdrant for case studies only
+        # Search Qdrant in case study collection (separate from KB)
         qdrant_client = get_qdrant_client()
-        from qdrant_client.http import models as qdrant_models
 
+        logger.info(f"📚 Searching for case studies in separate collection: {CASE_STUDY_COLLECTION}")
         search_results = qdrant_client.search(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=CASE_STUDY_COLLECTION,  # Dedicated case study collection
             query_vector=query_vector,
-            query_filter=qdrant_models.Filter(
-                must=[
-                    qdrant_models.FieldCondition(
-                        key="document_type",
-                        match=qdrant_models.MatchValue(value="case_study")
-                    )
-                ]
-            ),
             limit=1,
             score_threshold=0.65  # Minimum similarity threshold
         )
@@ -474,7 +466,7 @@ async def get_related_case_study(
         payload = best_match.payload or {}
         similarity_score = float(best_match.score)
 
-        logger.info(f"✅ Found case study match with similarity: {similarity_score:.2%}")
+        logger.info(f"✅ Found case study match in '{CASE_STUDY_COLLECTION}' collection with similarity: {similarity_score:.2%}")
 
         # Parse case study metadata from payload
         case_study_json = payload.get("case_study_metadata")

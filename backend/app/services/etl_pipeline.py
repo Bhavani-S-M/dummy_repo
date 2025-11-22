@@ -29,7 +29,7 @@ from app.utils import azure_blob
 from app.utils.scope_engine import extract_text_from_file
 from app.utils.ai_clients import embed_text_ollama, get_qdrant_client
 from app.utils.case_study_parser import parse_case_study_from_ppt, extract_all_text_from_ppt
-from app.config.config import QDRANT_COLLECTION
+from app.config.config import QDRANT_COLLECTION, CASE_STUDY_COLLECTION
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +264,9 @@ class ETLPipeline:
         """
         Find existing KB documents similar to the new content.
 
+        NOTE: This only searches within KB documents, NOT case studies.
+        Case studies have their own separate collection and are not mixed with KB.
+
         Returns:
             List of similar documents with similarity scores
         """
@@ -277,9 +280,9 @@ class ETLPipeline:
 
             query_vector = embeddings[0]
 
-            # Search Qdrant for similar vectors
+            # Search Qdrant for similar vectors (KB collection only, no case studies)
             search_results = self.qdrant_client.search(
-                collection_name=QDRANT_COLLECTION,
+                collection_name=QDRANT_COLLECTION,  # Only search KB documents
                 query_vector=query_vector,
                 limit=5,
                 score_threshold=self.similarity_threshold
@@ -411,9 +414,17 @@ class ETLPipeline:
                     )
                 )
 
+            # Route to correct collection based on document type
+            if doc.document_type == "case_study":
+                target_collection = CASE_STUDY_COLLECTION
+                logger.info(f"📚 Storing case study in separate collection: {CASE_STUDY_COLLECTION}")
+            else:
+                target_collection = QDRANT_COLLECTION
+                logger.debug(f"📄 Storing KB document in collection: {QDRANT_COLLECTION}")
+
             # Upload to Qdrant
             self.qdrant_client.upsert(
-                collection_name=QDRANT_COLLECTION,
+                collection_name=target_collection,
                 points=points
             )
 
@@ -429,7 +440,7 @@ class ETLPipeline:
             job.vectors_created = len(points)
             job.completed_at = datetime.now(timezone.utc)
 
-            logger.info(f"✅ Vectorized {doc.file_name}: {len(points)} vectors created")
+            logger.info(f"✅ Vectorized {doc.file_name}: {len(points)} vectors created in '{target_collection}' collection")
 
         except Exception as e:
             job.status = "failed"
