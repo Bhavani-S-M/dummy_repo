@@ -35,6 +35,7 @@ const TABS = [
   { key: "resourcing", label: "Resourcing Plan", icon: FileText },
   { key: "architecture", label: "Architecture Diagram", icon: FileText },
   { key: "summary", label: "Summary", icon: FileText },
+  { key: "related_case_study", label: "Related Case Study", icon: FileText },
 ];
 
 const formatCurrency = (v, currency = "USD") => {

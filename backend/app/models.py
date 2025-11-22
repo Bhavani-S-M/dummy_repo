@@ -279,6 +279,10 @@ class KnowledgeBaseDocument(Base):
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256 hash
     file_size: Mapped[int] = mapped_column(nullable=False)
 
+    # Document type and metadata
+    document_type: Mapped[str] = mapped_column(String(50), default="general", index=True)  # "general" or "case_study"
+    case_study_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON: {client_name, overview, solution, impact}
+
     # Vector status
     is_vectorized: Mapped[bool] = mapped_column(default=False, index=True)
     qdrant_point_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of point IDs

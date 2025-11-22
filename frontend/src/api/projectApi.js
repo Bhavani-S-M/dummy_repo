@@ -82,6 +82,9 @@ const projectApi = {
   getFinalizedScope: (id, { signal } = {}) =>
     api.get(`/projects/${id}/finalized_scope`, { signal }),
 
+  getRelatedCaseStudy: (id, { signal } = {}) =>
+    api.get(`/projects/${id}/related_case_study`, { signal }),
+
   getDownloadUrl: (filePath, base = "projects") =>
     `${api.defaults.baseURL}/blobs/download/${filePath}?base=${base}`,
 

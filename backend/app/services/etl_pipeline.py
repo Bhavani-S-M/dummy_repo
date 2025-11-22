@@ -28,6 +28,7 @@ from app import models
 from app.utils import azure_blob
 from app.utils.scope_engine import extract_text_from_file
 from app.utils.ai_clients import embed_text_ollama, get_qdrant_client
+from app.utils.case_study_parser import parse_case_study_from_ppt, extract_all_text_from_ppt
 from app.config.config import QDRANT_COLLECTION
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,32 @@ class ETLPipeline:
         self.chunk_size = 1000  # Characters per chunk
         self.overlap = 200  # Overlap between chunks
         self.similarity_threshold = 0.85  # Threshold for detecting updates
+
+    def _is_case_study_document(self, blob_path: str, file_name: str) -> bool:
+        """
+        Determine if a document is a case study based on path or filename.
+
+        Detection criteria:
+        - Folder path contains "case_study" or "case study"
+        - Filename contains "case_study" or "case study"
+        - Filename matches pattern like "CS_*.pptx"
+        """
+        path_lower = blob_path.lower()
+        name_lower = file_name.lower()
+
+        # Check folder path
+        if any(keyword in path_lower for keyword in ["case_study", "case study", "casestudy"]):
+            return True
+
+        # Check filename
+        if any(keyword in name_lower for keyword in ["case_study", "case study", "casestudy", "client_story"]):
+            return True
+
+        # Check for common case study filename patterns
+        if name_lower.startswith("cs_") or name_lower.startswith("case_"):
+            return True
+
+        return False
 
     async def scan_and_process_new_documents(self, db: AsyncSession) -> Dict[str, int]:
         """
@@ -151,22 +178,63 @@ class ETLPipeline:
                 doc = existing_doc
                 stats["updated"] += 1
         else:
+            # Detect if this is a case study document
+            is_case_study = self._is_case_study_document(blob_path, file_name)
+            doc_type = "case_study" if is_case_study else "general"
+
             # Create new document record
             doc = models.KnowledgeBaseDocument(
                 file_name=file_name,
                 blob_path=blob_path,
                 file_hash=file_hash,
                 file_size=file_size,
-                is_vectorized=False
+                is_vectorized=False,
+                document_type=doc_type
             )
             db.add(doc)
             await db.flush()  # Get the document ID
             stats["new"] += 1
-            logger.info(f"📝 New document added: {file_name}")
+            logger.info(f"📝 New {doc_type} document added: {file_name}")
 
         # Extract text from document
         try:
-            text_content = extract_text_from_file(io.BytesIO(file_bytes), file_name)
+            # For case study PPTs, try structured parsing first
+            if doc.document_type == "case_study" and file_name.lower().endswith(('.ppt', '.pptx')):
+                # Save file temporarily for parsing
+                import tempfile
+                import os
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_name)[1]) as tmp_file:
+                    tmp_file.write(file_bytes)
+                    tmp_path = tmp_file.name
+
+                try:
+                    # Parse structured case study data
+                    case_studies = parse_case_study_from_ppt(tmp_path)
+
+                    if case_studies:
+                        # Use the first case study (or merge multiple if present)
+                        case_study = case_studies[0]
+                        doc.case_study_metadata = json.dumps({
+                            "client_name": case_study.get("client_name", ""),
+                            "overview": case_study.get("overview", ""),
+                            "solution": case_study.get("solution", ""),
+                            "impact": case_study.get("impact", ""),
+                            "slide_range": case_study.get("slide_range", "")
+                        })
+                        text_content = case_study.get("full_text", "")
+                        logger.info(f"📚 Parsed case study: {case_study.get('client_name', 'Unknown')}")
+                    else:
+                        # Fallback to full text extraction
+                        text_content = extract_all_text_from_ppt(tmp_path)
+                        logger.warning(f"⚠️ Structured parsing failed, using full text extraction")
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+            else:
+                # Standard text extraction for non-case-study documents
+                text_content = extract_text_from_file(io.BytesIO(file_bytes), file_name)
+
             if not text_content or len(text_content.strip()) < 50:
                 logger.warning(f"⚠️ No meaningful text extracted from {file_name}")
                 return
@@ -321,18 +389,25 @@ class ETLPipeline:
                 point_id_str = f"{doc.id}_{idx}"
                 point_id = int(hashlib.sha256(point_id_str.encode()).hexdigest()[:16], 16)
 
+                payload = {
+                    "document_id": str(doc.id),
+                    "file_name": doc.file_name,
+                    "blob_path": doc.blob_path,
+                    "chunk_index": idx,
+                    "content": chunk[:1000],  # Store first 1000 chars
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "document_type": doc.document_type or "general"
+                }
+
+                # Add case study metadata to payload if available
+                if doc.document_type == "case_study" and doc.case_study_metadata:
+                    payload["case_study_metadata"] = doc.case_study_metadata
+
                 points.append(
                     qdrant_models.PointStruct(
                         id=point_id,
                         vector=vector,
-                        payload={
-                            "document_id": str(doc.id),
-                            "file_name": doc.file_name,
-                            "blob_path": doc.blob_path,
-                            "chunk_index": idx,
-                            "content": chunk[:1000],  # Store first 1000 chars
-                            "created_at": datetime.now(timezone.utc).isoformat()
-                        }
+                        payload=payload
                     )
                 )
 

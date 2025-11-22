@@ -1,9 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import projectApi from '../api/projectApi';
 
 /**
  * Component to render scope section previews
  */
 const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
+  const { id: projectId } = useParams();
+  const [caseStudy, setCaseStudy] = useState(null);
+  const [caseStudyLoading, setCaseStudyLoading] = useState(false);
+  const [caseStudyError, setCaseStudyError] = useState(null);
+
+  // Fetch related case study when tab is active
+  useEffect(() => {
+    if (activeTab === 'related_case_study' && projectId) {
+      const fetchCaseStudy = async () => {
+        try {
+          setCaseStudyLoading(true);
+          setCaseStudyError(null);
+          const response = await projectApi.getRelatedCaseStudy(projectId);
+          setCaseStudy(response.data);
+        } catch (error) {
+          console.error('Failed to fetch related case study:', error);
+          setCaseStudyError(error.response?.data?.detail || 'Failed to load related case study');
+        } finally {
+          setCaseStudyLoading(false);
+        }
+      };
+      fetchCaseStudy();
+    }
+  }, [activeTab, projectId]);
+
   if (!parsedDraft) {
     return (
       <div className="text-center text-gray-500 dark:text-gray-400 py-12">
@@ -373,6 +400,90 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
   const sectionData = getSectionData();
   const isTableSection = activeTab === 'activities' || activeTab === 'resourcing';
   const isImageSection = activeTab === 'architecture';
+
+  // Handle Related Case Study tab separately
+  if (activeTab === 'related_case_study') {
+    return (
+      <div className="p-6 bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-gray-700 max-h-[600px] overflow-y-auto">
+        {caseStudyLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent"></div>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading related case study...</p>
+          </div>
+        ) : caseStudyError ? (
+          <div className="text-center py-12 text-red-600 dark:text-red-400">
+            <p className="font-semibold mb-2">Error</p>
+            <p className="text-sm">{caseStudyError}</p>
+          </div>
+        ) : caseStudy?.matched ? (
+          <div className="space-y-6">
+            <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg p-4 mb-6">
+              <p className="text-sm text-green-700 dark:text-green-400">
+                ✓ Found matching case study with {(caseStudy.similarity_score * 100).toFixed(1)}% similarity
+              </p>
+            </div>
+
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                Client Name
+              </h4>
+              <div className="ml-4">
+                <span className="text-gray-600 dark:text-gray-400">{caseStudy.case_study.client_name || '-'}</span>
+              </div>
+            </div>
+
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                Overview
+              </h4>
+              <div className="ml-4">
+                <span className="text-gray-600 dark:text-gray-400">{caseStudy.case_study.overview || '-'}</span>
+              </div>
+            </div>
+
+            <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                Solution
+              </h4>
+              <div className="ml-4">
+                <span className="text-gray-600 dark:text-gray-400">{caseStudy.case_study.solution || '-'}</span>
+              </div>
+            </div>
+
+            <div className="pb-4">
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                Impact
+              </h4>
+              <div className="ml-4">
+                <span className="text-gray-600 dark:text-gray-400">{caseStudy.case_study.impact || '-'}</span>
+              </div>
+            </div>
+
+            {caseStudy.case_study.file_name && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                Source: {caseStudy.case_study.file_name}
+                {caseStudy.case_study.slide_range && ` (Slides ${caseStudy.case_study.slide_range})`}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-500 dark:text-gray-400 mb-4">
+              <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
+              No matching case study was found in the provided PPT files.
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Upload case studies to the Knowledge Base to enable matching.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-gray-700 max-h-[600px] overflow-y-auto">

@@ -377,3 +377,148 @@ async def get_project_questions(
         logger.error(f"Failed to fetch questions.json for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch project questions")
 
+
+# GET RELATED CASE STUDY
+@router.get("/{project_id}/related_case_study")
+async def get_related_case_study(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_session),
+    current_user: models.User = Depends(get_current_active_user),
+):
+    """
+    Find the most relevant case study for a project based on its executive summary.
+
+    Returns:
+        - Matched case study with client_name, overview, solution, impact
+        - Or message indicating no match was found
+    """
+    from app.utils.ai_clients import embed_text_ollama, get_qdrant_client
+    from app.config.config import QDRANT_COLLECTION
+
+    # Fetch project
+    db_project = await projects.get_project(db, project_id=project_id, owner_id=current_user.id)
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Load finalized_scope.json from blob storage
+    blob_name = f"projects/{project_id}/finalized_scope.json"
+
+    try:
+        # Check if scope exists
+        if not await azure_blob.blob_exists(blob_name):
+            raise HTTPException(
+                status_code=404,
+                detail="Project scope not generated yet. Please generate project scope first."
+            )
+
+        # Download and parse scope
+        scope_bytes = await azure_blob.download_bytes(blob_name)
+        scope_data = json.loads(scope_bytes.decode("utf-8"))
+
+        # Extract executive summary from project_summary
+        project_summary = scope_data.get("project_summary", {})
+        executive_summary = project_summary.get("executive_summary", "")
+
+        if not executive_summary or len(executive_summary.strip()) < 20:
+            # Fallback to project overview or description
+            overview = scope_data.get("overview", {})
+            executive_summary = (
+                overview.get("Project Description", "") or
+                overview.get("description", "") or
+                f"{db_project.tech_stack or ''} {db_project.use_cases or ''}"
+            )
+
+        if not executive_summary or len(executive_summary.strip()) < 20:
+            raise HTTPException(
+                status_code=400,
+                detail="Insufficient project description for case study matching. Please ensure project has executive summary."
+            )
+
+        logger.info(f"🔍 Finding case study for project {project_id} using executive summary (length: {len(executive_summary)} chars)")
+
+        # Generate embedding from executive summary
+        embeddings = embed_text_ollama([executive_summary])
+        if not embeddings or not embeddings[0]:
+            raise HTTPException(status_code=500, detail="Failed to generate embedding for project summary")
+
+        query_vector = embeddings[0]
+
+        # Search Qdrant for case studies only
+        qdrant_client = get_qdrant_client()
+        from qdrant_client.http import models as qdrant_models
+
+        search_results = qdrant_client.search(
+            collection_name=QDRANT_COLLECTION,
+            query_vector=query_vector,
+            query_filter=qdrant_models.Filter(
+                must=[
+                    qdrant_models.FieldCondition(
+                        key="document_type",
+                        match=qdrant_models.MatchValue(value="case_study")
+                    )
+                ]
+            ),
+            limit=1,
+            score_threshold=0.65  # Minimum similarity threshold
+        )
+
+        if not search_results or len(search_results) == 0:
+            return {
+                "matched": False,
+                "message": "No matching case study was found in the provided PPT files.",
+                "similarity_score": 0.0
+            }
+
+        # Get the best match
+        best_match = search_results[0]
+        payload = best_match.payload or {}
+        similarity_score = float(best_match.score)
+
+        logger.info(f"✅ Found case study match with similarity: {similarity_score:.2%}")
+
+        # Parse case study metadata from payload
+        case_study_json = payload.get("case_study_metadata")
+        if case_study_json:
+            case_study_data = json.loads(case_study_json) if isinstance(case_study_json, str) else case_study_json
+        else:
+            # Fallback: get from database
+            document_id = payload.get("document_id")
+            if document_id:
+                result = await db.execute(
+                    select(models.KnowledgeBaseDocument).where(
+                        models.KnowledgeBaseDocument.id == uuid.UUID(document_id)
+                    )
+                )
+                doc = result.scalar_one_or_none()
+                if doc and doc.case_study_metadata:
+                    case_study_data = json.loads(doc.case_study_metadata)
+                else:
+                    case_study_data = {}
+            else:
+                case_study_data = {}
+
+        # Extract structured fields
+        client_name = case_study_data.get("client_name", payload.get("file_name", "Unknown Client"))
+        overview = case_study_data.get("overview", payload.get("content", "")[:500])
+        solution = case_study_data.get("solution", "")
+        impact = case_study_data.get("impact", "")
+
+        return {
+            "matched": True,
+            "similarity_score": similarity_score,
+            "case_study": {
+                "client_name": client_name,
+                "overview": overview,
+                "solution": solution,
+                "impact": impact,
+                "file_name": payload.get("file_name", ""),
+                "slide_range": case_study_data.get("slide_range", "")
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to find related case study for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to find related case study: {str(e)}")
+

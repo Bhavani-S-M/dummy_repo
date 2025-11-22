@@ -179,28 +179,61 @@ export default function BlobDashboard() {
 
       {/* Upload (only for knowledge_base) */}
       {activeBase === "knowledge_base" && (
-        <div className="flex gap-4">
-          <label className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition cursor-pointer">
-            <Upload className="w-5 h-5" />
-            Upload File
-            <input type="file" className="hidden" onChange={onUploadFile} />
-          </label>
+        <>
+          <div className="flex gap-4">
+            <label className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition cursor-pointer">
+              <Upload className="w-5 h-5" />
+              Upload File
+              <input type="file" className="hidden" onChange={onUploadFile} />
+            </label>
 
-          <label className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition cursor-pointer">
-            <Folder className="w-5 h-5" />
-            Upload Folder
-            <input
-              type="file"
-              multiple
-              webkitdirectory=""
-              mozdirectory=""
-              directory=""
-              className="hidden"
-            
-              onChange={onUploadFolder}
-            />
-          </label>
-        </div>
+            <label className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl shadow hover:bg-secondary transition cursor-pointer">
+              <Folder className="w-5 h-5" />
+              Upload Folder
+              <input
+                type="file"
+                multiple
+                webkitdirectory=""
+                mozdirectory=""
+                directory=""
+                className="hidden"
+
+                onChange={onUploadFolder}
+              />
+            </label>
+          </div>
+
+          {/* Case Study Section */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-xl border-2 border-blue-200 dark:border-blue-800 p-6 shadow-md">
+            <h2 className="text-xl font-bold text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
+              <FileIcon className="w-5 h-5" />
+              Case Study
+            </h2>
+            <p className="text-sm text-blue-700 dark:text-blue-300 mb-4">
+              Upload case study PPT files here. They will be automatically processed and used to match with your projects.
+            </p>
+            <label className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow hover:shadow-lg transition cursor-pointer">
+              <Upload className="w-5 h-5" />
+              Upload Case Study File
+              <input
+                type="file"
+                className="hidden"
+                accept=".ppt,.pptx"
+                onChange={async (e) => {
+                  const f = e.target.files[0];
+                  if (f) {
+                    // Upload to case_study folder
+                    await uploadFile(f, "case_study", activeBase);
+                    await loadExplorer(activeBase);
+                  }
+                }}
+              />
+            </label>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+              Accepted formats: .ppt, .pptx
+            </p>
+          </div>
+        </>
       )}
 
       {/* File Tree */}
