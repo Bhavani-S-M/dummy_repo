@@ -467,7 +467,7 @@ async def get_related_case_study(
             }
 
         # Now apply threshold
-        SIMILARITY_THRESHOLD = 0.80
+        SIMILARITY_THRESHOLD = 0.70  # 70% similarity threshold - balanced for good matches
         search_results = qdrant_client.search(
             collection_name=CASE_STUDY_COLLECTION,  # Dedicated case study collection
             query_vector=query_vector,
