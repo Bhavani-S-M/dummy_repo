@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from qdrant_client import models as models_qdrant
 
 from app import models
 from app.utils import azure_blob
@@ -211,18 +212,110 @@ class ETLPipeline:
                     # Parse structured case study data
                     case_studies = parse_case_study_from_ppt(tmp_path)
 
-                    if case_studies:
-                        # Use the first case study (or merge multiple if present)
-                        case_study = case_studies[0]
-                        doc.case_study_metadata = json.dumps({
-                            "client_name": case_study.get("client_name", ""),
-                            "overview": case_study.get("overview", ""),
-                            "solution": case_study.get("solution", ""),
-                            "impact": case_study.get("impact", ""),
-                            "slide_range": case_study.get("slide_range", "")
-                        })
-                        text_content = case_study.get("full_text", "")
-                        logger.info(f"📚 Parsed case study: {case_study.get('client_name', 'Unknown')}")
+                    if case_studies and len(case_studies) > 0:
+                        logger.info(f"📚 Found {len(case_studies)} case studies in {file_name}")
+
+                        # Process each case study separately
+                        for idx, case_study in enumerate(case_studies):
+                            # For first case study, use existing doc record
+                            # For additional ones, create new document records
+                            if idx == 0:
+                                current_doc = doc
+                            else:
+                                # Create unique identifier for additional case studies
+                                case_study_blob_path = f"{blob_path}#case_study_{idx + 1}"
+                                client_name = case_study.get('client_name', f'Case Study {idx + 1}')
+                                case_study_file_name = f"{file_name} - {client_name}"
+
+                                # Check if this specific case study already exists
+                                result = await db.execute(
+                                    select(models.KnowledgeBaseDocument).where(
+                                        models.KnowledgeBaseDocument.blob_path == case_study_blob_path
+                                    )
+                                )
+                                existing_case_doc = result.scalar_one_or_none()
+
+                                if existing_case_doc:
+                                    # Update existing case study document
+                                    existing_case_doc.file_hash = file_hash
+                                    existing_case_doc.file_size = file_size
+                                    existing_case_doc.is_vectorized = False
+                                    existing_case_doc.last_checked = datetime.now(timezone.utc)
+                                    current_doc = existing_case_doc
+                                    logger.info(f"🔄 Updating existing case study: {client_name}")
+                                else:
+                                    # Create new document record for this case study
+                                    current_doc = models.KnowledgeBaseDocument(
+                                        file_name=case_study_file_name,
+                                        blob_path=case_study_blob_path,
+                                        file_hash=file_hash,
+                                        file_size=file_size,
+                                        is_vectorized=False,
+                                        document_type="case_study"
+                                    )
+                                    db.add(current_doc)
+                                    await db.flush()
+                                    logger.info(f"📝 Created new case study document: {client_name}")
+
+                            # Store metadata for this specific case study
+                            current_doc.case_study_metadata = json.dumps({
+                                "client_name": case_study.get("client_name", ""),
+                                "overview": case_study.get("overview", ""),
+                                "solution": case_study.get("solution", ""),
+                                "impact": case_study.get("impact", ""),
+                                "slide_range": case_study.get("slide_range", "")
+                            })
+
+                            case_text_content = case_study.get("full_text", "")
+
+                            if case_text_content and len(case_text_content.strip()) >= 50:
+                                # Vectorize and store this case study
+                                await self._vectorize_and_store(db, current_doc, case_text_content)
+                                logger.info(f"✅ Case study vectorized: {case_study.get('client_name', 'Unknown')}")
+                            else:
+                                logger.warning(f"⚠️ Insufficient text for case study: {case_study.get('client_name', 'Unknown')}")
+
+                        # Cleanup: Remove orphaned case study documents
+                        # If file previously had more case studies than now, delete the extras
+                        orphan_check_idx = len(case_studies) + 1
+                        while True:
+                            orphan_blob_path = f"{blob_path}#case_study_{orphan_check_idx}"
+                            result = await db.execute(
+                                select(models.KnowledgeBaseDocument).where(
+                                    models.KnowledgeBaseDocument.blob_path == orphan_blob_path
+                                )
+                            )
+                            orphan_doc = result.scalar_one_or_none()
+
+                            if orphan_doc:
+                                logger.info(f"🗑️  Removing orphaned case study document: {orphan_doc.file_name}")
+                                # Delete from Qdrant first
+                                try:
+                                    self.qdrant_client.delete(
+                                        collection_name=CASE_STUDY_COLLECTION,
+                                        points_selector=models_qdrant.FilterSelector(
+                                            filter=models_qdrant.Filter(
+                                                must=[
+                                                    models_qdrant.FieldCondition(
+                                                        key="document_id",
+                                                        match=models_qdrant.MatchValue(value=str(orphan_doc.id))
+                                                    )
+                                                ]
+                                            )
+                                        )
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"⚠️ Failed to delete vectors for orphaned case study: {e}")
+
+                                # Delete from database
+                                await db.delete(orphan_doc)
+                                orphan_check_idx += 1
+                            else:
+                                # No more orphaned documents found
+                                break
+
+                        # All case studies processed, return early
+                        return
                     else:
                         # Fallback to full text extraction
                         text_content = extract_all_text_from_ppt(tmp_path)
