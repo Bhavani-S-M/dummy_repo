@@ -451,7 +451,7 @@ async def get_related_case_study(
             collection_name=CASE_STUDY_COLLECTION,  # Dedicated case study collection
             query_vector=query_vector,
             limit=1,
-            score_threshold=0.65  # Minimum similarity threshold
+            score_threshold=0.80  # Minimum similarity threshold (increased to ensure better semantic match)
         )
 
         if not search_results or len(search_results) == 0:
