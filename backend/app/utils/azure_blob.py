@@ -71,10 +71,21 @@ async def upload_file(path: str, blob_name: str, base: str = "") -> str:
 
 
 # Download
-async def download_bytes(blob_name: str, base: str = "") -> bytes:
+async def download_bytes(blob_name: str, base: str = "", timeout: int = 300) -> bytes:
+    """
+    Download a blob as bytes.
+
+    Args:
+        blob_name: Name/path of the blob
+        base: Base path prefix
+        timeout: Timeout in seconds (default: 300 = 5 minutes for large files like PPTs)
+
+    Returns:
+        Blob content as bytes
+    """
     path = _normalize_path(blob_name, base)
     blob = container.get_blob_client(path)
-    stream = await blob.download_blob()
+    stream = await blob.download_blob(timeout=timeout)
     return await stream.readall()
 
 async def download_text(blob_name: str, base: str = "", encoding: str = "utf-8") -> str:
