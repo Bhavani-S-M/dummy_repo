@@ -350,6 +350,76 @@ def generate_xlsx(scope: Dict[str, Any]) -> io.BytesIO:
                         ws_s.write(row, 1, risk_item.get("mitigation", ""), zfmt)
                         row += 1
 
+        # -------- Related Case Study --------
+        case_study = data.get("related_case_study", {})
+        if case_study and isinstance(case_study, dict) and case_study.get("matched"):
+            ws_cs = wb.add_worksheet("Case Study")
+            ws_cs.set_column("A:A", 25)
+            ws_cs.set_column("B:B", 100)
+
+            # Add title
+            title_format = wb.add_format({
+                "bold": True, "font_size": 14, "bg_color": THEME["header_bg"],
+                "border": 1, "align": "left"
+            })
+            ws_cs.merge_range("A1:B1", "Related Case Study", title_format)
+
+            row = 2
+
+            # Client Name
+            client_name = case_study.get("client_name", "")
+            if client_name:
+                ws_cs.write(row, 0, "Client", fmt_th)
+                ws_cs.write(row, 1, client_name, wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top", "bold": True
+                }))
+                row += 2
+
+            # Overview
+            overview = case_study.get("overview", "")
+            if overview:
+                ws_cs.write(row, 0, "Overview", fmt_th)
+                ws_cs.write(row, 1, overview, wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top"
+                }))
+                row += 2
+
+            # Solution
+            solution = case_study.get("solution", "")
+            if solution:
+                ws_cs.write(row, 0, "Solution", fmt_th)
+                ws_cs.write(row, 1, solution, wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top"
+                }))
+                row += 2
+
+            # Impact
+            impact = case_study.get("impact", "")
+            if impact:
+                ws_cs.write(row, 0, "Impact", fmt_th)
+                ws_cs.write(row, 1, impact, wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top"
+                }))
+                row += 2
+
+            # Similarity Score
+            similarity = case_study.get("similarity_score", 0)
+            if similarity:
+                ws_cs.write(row, 0, "Similarity Score", fmt_th)
+                ws_cs.write(row, 1, f"{similarity:.1%}", wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top"
+                }))
+                row += 2
+
+            # Source
+            source = case_study.get("source", "")
+            if source:
+                ws_cs.write(row, 0, "Source", fmt_th)
+                ws_cs.write(row, 1, source, wb.add_format({
+                    "border": 1, "text_wrap": True, "valign": "top", "italic": True
+                }))
+                row += 2
+
         wb.close()
         buf.seek(0)
         return buf
@@ -756,6 +826,54 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
                 risk_table.hAlign = "LEFT"
                 elems.append(risk_table)
                 elems.append(Spacer(1, 0.4 * cm))
+
+    # -------- Related Case Study --------
+    case_study = data.get("related_case_study", {})
+    logger.info(f"📚 Case study in scope data: {bool(case_study)} (matched: {case_study.get('matched') if case_study else False})")
+    if case_study and isinstance(case_study, dict) and case_study.get("matched"):
+        logger.info(f"✅ Adding Case Study section to PDF")
+        elems.append(PageBreak())
+        elems.append(Paragraph("<b>Related Case Study</b>", styles["Heading1"]))
+        elems.append(Spacer(1, 0.4 * cm))
+
+        # Client Name
+        client_name = case_study.get("client_name", "")
+        if client_name:
+            elems.append(Paragraph(f"<b>Client:</b> {client_name}", styles["Heading2"]))
+            elems.append(Spacer(1, 0.2 * cm))
+
+        # Overview
+        overview = case_study.get("overview", "")
+        if overview:
+            elems.append(Paragraph("<b>Overview</b>", styles["Heading3"]))
+            elems.append(Paragraph(overview, wrap))
+            elems.append(Spacer(1, 0.3 * cm))
+
+        # Solution
+        solution = case_study.get("solution", "")
+        if solution:
+            elems.append(Paragraph("<b>Solution</b>", styles["Heading3"]))
+            elems.append(Paragraph(solution, wrap))
+            elems.append(Spacer(1, 0.3 * cm))
+
+        # Impact
+        impact = case_study.get("impact", "")
+        if impact:
+            elems.append(Paragraph("<b>Impact</b>", styles["Heading3"]))
+            elems.append(Paragraph(impact, wrap))
+            elems.append(Spacer(1, 0.3 * cm))
+
+        # Similarity Score
+        similarity = case_study.get("similarity_score", 0)
+        if similarity:
+            elems.append(Paragraph(f"<b>Similarity Score:</b> {similarity:.1%}", wrap))
+            elems.append(Spacer(1, 0.2 * cm))
+
+        # Source
+        source = case_study.get("source", "")
+        if source:
+            elems.append(Paragraph(f"<i>Source: {source}</i>", wrap))
+            elems.append(Spacer(1, 0.4 * cm))
 
     # Build PDF
     doc.build(elems)
