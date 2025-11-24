@@ -73,6 +73,10 @@ def parse_case_study_from_ppt(file_path: str) -> List[Dict[str, str]]:
             case_studies.append(current_case_study)
             logger.info(f"📚 Extracted case study: {current_case_study.get('client_name', 'Unknown')}")
 
+        # Post-process: Extract overview from long client names if overview is missing
+        for case_study in case_studies:
+            _extract_overview_from_client_name(case_study)
+
         logger.info(f"✅ Parsed {len(case_studies)} case studies from PPT")
         return case_studies
 
@@ -135,8 +139,20 @@ def _extract_client_name(text: str) -> str:
             return match.group(1).strip()
 
     # Fallback: use first non-empty line as client name
+    # If first line is very long (>150 chars), it likely contains description too
+    # In that case, extract just the company name part before dash or parenthesis
     if lines:
-        return lines[0]
+        first_line = lines[0]
+
+        # If line is long and contains dash/description, split it
+        if len(first_line) > 150:
+            # Try to extract just the company name before " – " or " - "
+            match = re.match(r"^([^–—-]+?)(?:\s*[–—-]\s*|\s*\()", first_line)
+            if match:
+                # Return just the company name part
+                return match.group(1).strip()
+
+        return first_line
 
     return "Unknown Client"
 
@@ -211,6 +227,49 @@ def _is_valid_case_study(case_study: Dict[str, str]) -> bool:
     ])
 
     return has_content
+
+
+def _extract_overview_from_client_name(case_study: Dict[str, str]) -> None:
+    """
+    If client_name is very long and overview is empty, extract the description
+    part from client_name and use it as overview.
+
+    Example:
+    Input:  client_name = "SK-II (P&G) – Global prestige skincare brand..."
+    Output: client_name = "SK-II (P&G)"
+            overview = "Global prestige skincare brand..."
+    """
+    client_name = case_study.get("client_name", "")
+    overview = case_study.get("overview", "")
+
+    # Only process if overview is empty and client_name is long
+    if overview or len(client_name) < 100:
+        return
+
+    # Look for dash or em-dash separators (–, —, -)
+    # These often separate company name from description
+    match = re.match(r"^(.+?)\s*[–—-]\s*(.+)$", client_name)
+    if match:
+        company_part = match.group(1).strip()
+        description_part = match.group(2).strip()
+
+        # Only split if description part is substantial (>50 chars)
+        if len(description_part) > 50:
+            case_study["client_name"] = company_part
+            case_study["overview"] = description_part
+            logger.info(f"✂️ Split long client name into client + overview for: {company_part}")
+            return
+
+    # Alternative: Look for parentheses with long content after
+    match = re.match(r"^(.+?)\s*\(([^)]+)\)\s*[–—-]?\s*(.+)$", client_name)
+    if match:
+        company_part = f"{match.group(1).strip()} ({match.group(2).strip()})"
+        description_part = match.group(3).strip()
+
+        if len(description_part) > 50:
+            case_study["client_name"] = company_part
+            case_study["overview"] = description_part
+            logger.info(f"✂️ Split long client name into client + overview for: {company_part}")
 
 
 def _build_full_text(case_study: Dict[str, str]) -> str:
