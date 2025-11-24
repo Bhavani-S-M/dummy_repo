@@ -1883,6 +1883,21 @@ async def generate_architecture(
             start_idx = match.start()
             dot_code = dot_code[start_idx:].strip()
 
+    # Remove duplicate digraph declarations (common LLM error)
+    # If we have multiple "digraph Architecture {" lines, keep only the first one
+    lines = dot_code.split('\n')
+    digraph_count = 0
+    cleaned_lines = []
+    for line in lines:
+        if re.match(r'^\s*digraph\s+\w+\s*\{\s*$', line, re.IGNORECASE):
+            digraph_count += 1
+            if digraph_count == 1:
+                cleaned_lines.append(line)
+            # else: skip duplicate digraph lines
+        else:
+            cleaned_lines.append(line)
+    dot_code = '\n'.join(cleaned_lines)
+
     dot_code = re.sub(r"(?i)^graph\s", "digraph ", dot_code)
 
     # Remove C-style comments (// ...) - Graphviz DOT doesn't support them
