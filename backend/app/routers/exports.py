@@ -52,12 +52,6 @@ async def _fetch_related_case_study(project_id: uuid.UUID, db: AsyncSession) -> 
     try:
         from app.utils.ai_clients import embed_text_ollama, get_qdrant_client
         from app.config.config import CASE_STUDY_COLLECTION
-        from app import crud as projects
-
-        # Fetch project
-        db_project = await projects.get_project_by_id(db, project_id=project_id)
-        if not db_project:
-            return None
 
         # Load finalized_scope.json to get executive summary
         blob_name = f"projects/{project_id}/finalized_scope.json"
