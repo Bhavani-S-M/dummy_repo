@@ -89,7 +89,7 @@ async def _fetch_related_case_study(project_id: uuid.UUID, db: AsyncSession) -> 
         best_score = float(all_results[0].score)
 
         # Apply threshold
-        SIMILARITY_THRESHOLD = 0.70
+        SIMILARITY_THRESHOLD = 0.60  # Match the threshold used in projects.py
         if best_score < SIMILARITY_THRESHOLD:
             return None
 
