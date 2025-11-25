@@ -163,9 +163,71 @@ async def delete_file(blob_name: str, base: Literal["projects", "knowledge_base"
 
 
 @router.delete("/delete/folder/{folder_name:path}")
-async def delete_folder(folder_name: str, base: Literal["projects", "knowledge_base"] = Query(...)):
+async def delete_folder(
+    folder_name: str,
+    base: Literal["projects", "knowledge_base"] = Query(...),
+    db: AsyncSession = Depends(get_async_session)
+):
     try:
         base = _validate_base(base)
+
+        # If deleting from knowledge_base, also clean up database and Qdrant
+        if base == "knowledge_base":
+            from sqlalchemy import select, delete
+            from app.models import KnowledgeBaseDocument
+            from app.config.config import QDRANT_COLLECTION, CASE_STUDY_COLLECTION
+            from app.utils.ai_clients import get_qdrant_client
+            from qdrant_client import models as models_qdrant
+
+            # Construct blob path prefix
+            blob_prefix = f"{base}/{folder_name}/"
+            logger.info(f"🗑️ Cleaning up KB documents with prefix: {blob_prefix}")
+
+            # Find all documents under this folder
+            result = await db.execute(
+                select(KnowledgeBaseDocument).where(
+                    KnowledgeBaseDocument.blob_path.like(f"{blob_prefix}%")
+                )
+            )
+            documents = result.scalars().all()
+
+            if documents:
+                logger.info(f"🗑️ Found {len(documents)} KB documents to delete")
+                qdrant_client = get_qdrant_client()
+
+                # Delete vectors from Qdrant for each document
+                for doc in documents:
+                    try:
+                        # Determine which collection based on document_type
+                        collection = CASE_STUDY_COLLECTION if doc.document_type == "case_study" else QDRANT_COLLECTION
+
+                        qdrant_client.delete(
+                            collection_name=collection,
+                            points_selector=models_qdrant.FilterSelector(
+                                filter=models_qdrant.Filter(
+                                    must=[
+                                        models_qdrant.FieldCondition(
+                                            key="document_id",
+                                            match=models_qdrant.MatchValue(value=str(doc.id))
+                                        )
+                                    ]
+                                )
+                            )
+                        )
+                        logger.info(f"✅ Deleted vectors for: {doc.file_name} from {collection}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to delete vectors for {doc.file_name}: {e}")
+
+                # Delete database records
+                await db.execute(
+                    delete(KnowledgeBaseDocument).where(
+                        KnowledgeBaseDocument.blob_path.like(f"{blob_prefix}%")
+                    )
+                )
+                await db.commit()
+                logger.info(f"✅ Deleted {len(documents)} KB document records from database")
+
+        # Delete blob files
         deleted = await azure_blob.delete_folder(folder_name, base)
         if not deleted:
             raise HTTPException(404, "Folder is empty or not found")
