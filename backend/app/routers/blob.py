@@ -179,8 +179,8 @@ async def delete_folder(
             from app.utils.ai_clients import get_qdrant_client
             from qdrant_client import models as models_qdrant
 
-            # Construct blob path prefix
-            blob_prefix = f"{base}/{folder_name}/"
+            # Construct blob path prefix (folder_name already includes base in the path)
+            blob_prefix = f"{folder_name}/"
             logger.info(f"🗑️ Cleaning up KB documents with prefix: {blob_prefix}")
 
             # Find all documents under this folder
