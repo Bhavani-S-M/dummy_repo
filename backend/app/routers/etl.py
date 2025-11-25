@@ -8,7 +8,7 @@ Provides admin endpoints for managing the ETL pipeline:
 - View processing job status
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import List, Optional
 from datetime import datetime
 import uuid
@@ -17,39 +17,111 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
-from app.config.database import get_async_session
+from app.config.database import get_async_session, AsyncSessionLocal
 from app.auth.router import fastapi_users
 from app.services.etl_pipeline import get_etl_pipeline
 import json
+import asyncio
 
 # Only superusers can access ETL endpoints
 get_current_superuser = fastapi_users.current_user(active=True, superuser=True)
 
 router = APIRouter(prefix="/api/etl", tags=["ETL Pipeline"])
 
+# In-memory state to track active scan
+_scan_state = {
+    "is_scanning": False,
+    "started_at": None,
+    "stats": None,
+    "error": None
+}
+
+
+async def _run_etl_scan_background():
+    """Background task to run ETL scan."""
+    global _scan_state
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        _scan_state["is_scanning"] = True
+        _scan_state["started_at"] = datetime.utcnow().isoformat()
+        _scan_state["stats"] = None
+        _scan_state["error"] = None
+
+        logger.info("🚀 ETL background scan started")
+
+        # Create new DB session for background task
+        async with AsyncSessionLocal() as db:
+            etl = get_etl_pipeline()
+            stats = await etl.scan_and_process_new_documents(db)
+
+            _scan_state["stats"] = stats
+            _scan_state["is_scanning"] = False
+
+        logger.info(f"✅ ETL background scan completed: {stats}")
+
+    except Exception as e:
+        logger.error(f"❌ ETL background scan failed: {e}")
+        _scan_state["error"] = str(e)
+        _scan_state["is_scanning"] = False
+
 
 @router.post("/scan")
 async def trigger_etl_scan(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_session),
     current_user: models.User = Depends(get_current_superuser)
 ):
     """
     Manually trigger an ETL scan of knowledge base documents.
 
+    Returns immediately and runs scan in background.
+    Use GET /scan/status to check progress.
+
     Only superusers can trigger ETL scans.
     """
-    try:
-        etl = get_etl_pipeline()
-        stats = await etl.scan_and_process_new_documents(db)
+    global _scan_state
 
+    # Check if scan is already running
+    if _scan_state["is_scanning"]:
         return {
-            "status": "success",
-            "message": "ETL scan completed",
-            "stats": stats
+            "status": "already_running",
+            "message": "ETL scan is already in progress",
+            "started_at": _scan_state["started_at"]
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ETL scan failed: {str(e)}")
+    # Start background task
+    background_tasks.add_task(_run_etl_scan_background)
+
+    return {
+        "status": "started",
+        "message": "ETL scan started in background",
+        "started_at": datetime.utcnow().isoformat()
+    }
+
+
+@router.get("/scan/status")
+async def get_scan_status(
+    current_user: models.User = Depends(get_current_superuser)
+):
+    """
+    Get the current status of ETL scan.
+
+    Returns whether a scan is running, when it started, and latest stats.
+    Frontend can poll this endpoint to show scan progress.
+
+    Only superusers can check scan status.
+    """
+    global _scan_state
+
+    return {
+        "status": "success",
+        "is_scanning": _scan_state["is_scanning"],
+        "started_at": _scan_state["started_at"],
+        "stats": _scan_state["stats"],
+        "error": _scan_state["error"]
+    }
 
 
 @router.get("/pending-updates")
