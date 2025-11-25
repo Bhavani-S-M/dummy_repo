@@ -146,8 +146,9 @@ def _extract_client_name(text: str) -> str:
 
         # If line is long and contains dash/description, split it
         if len(first_line) > 150:
-            # Try to extract just the company name before " – " or " - "
-            match = re.match(r"^([^–—-]+?)(?:\s*[–—-]\s*|\s*\()", first_line)
+            # Try to extract just the company name before en dash (–) or em dash (—)
+            # Note: Don't include regular hyphen (-) as it's used in names like "SK-II"
+            match = re.match(r"^([^–—]+?)(?:\s*[–—]\s*)", first_line)
             if match:
                 # Return just the company name part
                 return match.group(1).strip()
@@ -246,9 +247,10 @@ def _extract_overview_from_client_name(case_study: Dict[str, str]) -> None:
     if overview or len(client_name) < 100:
         return
 
-    # Look for dash or em-dash separators (–, —, -)
+    # Look for en dash (–) or em dash (—) separators
     # These often separate company name from description
-    match = re.match(r"^(.+?)\s*[–—-]\s*(.+)$", client_name)
+    # Note: Don't include regular hyphen (-) as it's used in names like "SK-II"
+    match = re.match(r"^(.+?)\s*[–—]\s*(.+)$", client_name)
     if match:
         company_part = match.group(1).strip()
         description_part = match.group(2).strip()
@@ -261,7 +263,7 @@ def _extract_overview_from_client_name(case_study: Dict[str, str]) -> None:
             return
 
     # Alternative: Look for parentheses with long content after
-    match = re.match(r"^(.+?)\s*\(([^)]+)\)\s*[–—-]?\s*(.+)$", client_name)
+    match = re.match(r"^(.+?)\s*\(([^)]+)\)\s*[–—]?\s*(.+)$", client_name)
     if match:
         company_part = f"{match.group(1).strip()} ({match.group(2).strip()})"
         description_part = match.group(3).strip()
