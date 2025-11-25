@@ -43,17 +43,106 @@ export default function ETLDashboard() {
     loadPendingUpdates();
     loadProcessingJobs();
     loadKBDocuments();
+
+    // Check if scan was running when page loaded
+    initializeScanState();
+
+    // Cleanup on unmount
+    return () => {
+      if (window.etlPollingInterval) {
+        clearInterval(window.etlPollingInterval);
+      }
+    };
   }, [loadStats, loadPendingUpdates, loadProcessingJobs, loadKBDocuments]);
+
+  // Initialize scan state on mount (check if scan is running)
+  const initializeScanState = async () => {
+    const scanStartTime = localStorage.getItem('etl_scan_started');
+
+    if (scanStartTime) {
+      // Scan was triggered before, check if still running
+      setScanLoading(true);
+
+      const stillProcessing = await checkIfStillProcessing();
+
+      if (stillProcessing) {
+        console.log('✅ ETL scan is still running, resuming polling...');
+        startStatusPolling();
+      } else {
+        console.log('✅ ETL scan completed while away');
+        cleanupScanState();
+        // Refresh all data
+        loadStats();
+        loadProcessingJobs();
+        loadKBDocuments();
+      }
+    }
+  };
+
+  // Check if ETL processing jobs are still running
+  const checkIfStillProcessing = async () => {
+    try {
+      await loadProcessingJobs('processing');
+      // If there are jobs with status='processing', scan is still running
+      return processingJobs.some(job => job.status === 'processing');
+    } catch (error) {
+      console.error('Failed to check processing status:', error);
+      return false;
+    }
+  };
+
+  // Start polling to check scan status every 5 seconds
+  const startStatusPolling = () => {
+    // Clear any existing interval
+    if (window.etlPollingInterval) {
+      clearInterval(window.etlPollingInterval);
+    }
+
+    // Poll every 5 seconds
+    window.etlPollingInterval = setInterval(async () => {
+      const stillProcessing = await checkIfStillProcessing();
+
+      if (!stillProcessing) {
+        console.log('✅ ETL scan completed!');
+        cleanupScanState();
+
+        // Refresh all data
+        loadStats();
+        loadPendingUpdates();
+        loadProcessingJobs();
+        loadKBDocuments();
+
+        // Stop polling
+        clearInterval(window.etlPollingInterval);
+      }
+    }, 5000); // 5 seconds
+  };
+
+  // Clean up scan state
+  const cleanupScanState = () => {
+    setScanLoading(false);
+    localStorage.removeItem('etl_scan_started');
+
+    if (window.etlPollingInterval) {
+      clearInterval(window.etlPollingInterval);
+    }
+  };
 
   const handleTriggerScan = async () => {
     setScanLoading(true);
+
+    // Save scan start time to localStorage
+    localStorage.setItem('etl_scan_started', Date.now().toString());
+
     try {
-      const result = await triggerScan();
-      alert(`ETL scan completed!\n${JSON.stringify(result.stats, null, 2)}`);
+      await triggerScan();
+      // Don't set scanLoading to false here!
+      // Let polling detect when it's done
+      console.log('✅ ETL scan triggered, starting polling...');
+      startStatusPolling();
     } catch (err) {
       alert(`ETL scan failed: ${err.message}`);
-    } finally {
-      setScanLoading(false);
+      cleanupScanState();
     }
   };
 
@@ -145,13 +234,26 @@ export default function ETLDashboard() {
           <button
             onClick={handleTriggerScan}
             disabled={scanLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-secondary to-orange-600 text-white rounded-xl hover:shadow-lg transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-secondary to-orange-600 text-white rounded-xl hover:shadow-lg transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             <Play className={`w-4 h-4 ${scanLoading ? "animate-pulse" : ""}`} />
             {scanLoading ? "Scanning..." : "Trigger ETL Scan"}
           </button>
         </div>
       </div>
+
+      {/* Scanning Status Alert */}
+      {scanLoading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start gap-3">
+          <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5 animate-pulse" />
+          <div>
+            <p className="font-semibold text-blue-900 dark:text-blue-100">ETL Scan in Progress</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Processing knowledge base documents... You can navigate away and come back. The scan will continue running.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (
