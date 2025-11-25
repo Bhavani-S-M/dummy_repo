@@ -51,10 +51,22 @@ async def create_project(
     db: AsyncSession = Depends(get_async_session),
     current_user: models.User = Depends(get_current_active_user),
 ):
-    if not any([name, domain, complexity, tech_stack, use_cases, compliance, duration, files]):
+    # Validate that at least one meaningful field is provided
+    # Check for non-empty strings or actual files
+    has_name = name and name.strip()
+    has_domain = domain and domain.strip()
+    has_complexity = complexity and complexity.strip()
+    has_tech_stack = tech_stack and tech_stack.strip()
+    has_use_cases = use_cases and use_cases.strip()
+    has_compliance = compliance and compliance.strip()
+    has_duration = duration and duration.strip()
+    has_files = files and len(files) > 0
+
+    if not any([has_name, has_domain, has_complexity, has_tech_stack,
+                has_use_cases, has_compliance, has_duration, has_files]):
         raise HTTPException(
             status_code=400,
-            detail="At least one project field or file must be provided."
+            detail="At least one project field with content or file must be provided."
         )
 
     if company_id:
@@ -140,6 +152,48 @@ async def delete_project(
     logger.info(f" Deleted project {project_id} (Blob folder auto-cleaned).")
 
     return {"msg": f"Project {project_id} deleted successfully (DB + Blob auto-cleaned)."}
+
+
+# CLEANUP EMPTY PROJECTS
+@router.delete("/cleanup/empty", response_model=schemas.MessageResponse)
+async def cleanup_empty_projects(
+    db: AsyncSession = Depends(get_async_session),
+    current_user: models.User = Depends(get_current_active_user),
+):
+    """Delete all empty projects (projects with no name and no domain)."""
+    # Find all projects with null or empty name AND null or empty domain
+    result = await db.execute(
+        select(models.Project).filter(
+            models.Project.owner_id == current_user.id,
+        )
+    )
+    all_projects = result.scalars().all()
+
+    empty_projects = []
+    for project in all_projects:
+        # Check if project is essentially empty (no meaningful data)
+        has_name = project.name and project.name.strip()
+        has_domain = project.domain and project.domain.strip()
+        has_complexity = project.complexity and project.complexity.strip()
+        has_tech_stack = project.tech_stack and project.tech_stack.strip()
+        has_use_cases = project.use_cases and project.use_cases.strip()
+        has_compliance = project.compliance and project.compliance.strip()
+        has_duration = project.duration and project.duration.strip()
+
+        # Project is empty if it has no meaningful fields
+        if not any([has_name, has_domain, has_complexity, has_tech_stack,
+                   has_use_cases, has_compliance, has_duration]):
+            empty_projects.append(project)
+
+    # Delete all empty projects
+    deleted_count = 0
+    for project in empty_projects:
+        await projects.delete_project(db, project)
+        deleted_count += 1
+
+    logger.info(f"🧹 Cleaned up {deleted_count} empty projects for user {current_user.id}")
+
+    return {"msg": f"Successfully deleted {deleted_count} empty project(s)."}
 
 
 #  DELETE ALL PROJECTS
