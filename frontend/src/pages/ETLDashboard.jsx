@@ -21,6 +21,7 @@ export default function ETLDashboard() {
     loading,
     error,
     triggerScan,
+    getScanStatus,
     loadPendingUpdates,
     approvePendingUpdate,
     rejectPendingUpdate,
@@ -79,12 +80,11 @@ export default function ETLDashboard() {
     }
   };
 
-  // Check if ETL processing jobs are still running
+  // Check if ETL scan is still running using the backend endpoint
   const checkIfStillProcessing = async () => {
     try {
-      await loadProcessingJobs('processing');
-      // If there are jobs with status='processing', scan is still running
-      return processingJobs.some(job => job.status === 'processing');
+      const statusData = await getScanStatus();
+      return statusData.is_scanning === true;
     } catch (error) {
       console.error('Failed to check processing status:', error);
       return false;

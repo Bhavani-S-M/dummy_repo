@@ -28,6 +28,17 @@ export const ETLProvider = ({ children }) => {
     }
   }, []);
 
+  // Get ETL scan status
+  const getScanStatus = useCallback(async () => {
+    try {
+      const { data } = await etlApi.getScanStatus();
+      return data;
+    } catch (err) {
+      console.error("Failed to get scan status:", err);
+      return { is_scanning: false };
+    }
+  }, []);
+
   // Load pending updates
   const loadPendingUpdates = useCallback(async (status = "pending", limit = 50, offset = 0) => {
     setLoading(true);
@@ -159,6 +170,7 @@ export const ETLProvider = ({ children }) => {
 
     // Actions
     triggerScan,
+    getScanStatus,
     loadPendingUpdates,
     approvePendingUpdate,
     rejectPendingUpdate,

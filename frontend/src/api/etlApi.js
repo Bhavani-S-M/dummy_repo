@@ -8,6 +8,11 @@ const etlApi = {
   triggerScan: () => api.post("/etl/scan"),
 
   /**
+   * Get ETL scan status (whether scan is running)
+   */
+  getScanStatus: () => api.get("/etl/scan/status"),
+
+  /**
    * Get pending KB updates requiring approval
    * @param {string} status - Filter by status: pending, approved, rejected
    * @param {number} limit - Number of results to return
