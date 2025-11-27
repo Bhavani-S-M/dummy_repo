@@ -568,30 +568,34 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
             header = ["Task", "Owner"] + [f"Week {i+1}" for i in range(total_weeks)]
             table_data = [header]
 
+            # Track which cells need blue background for bars
+            blue_cells = []
+
             # For each activity, create a row
-            for a, s, e in parsed:
+            for row_idx, (a, s, e) in enumerate(parsed, start=1):
                 task_name = (a.get("Activities") or "")[:40]
                 owner = a.get("Owner") or "Unassigned"
 
-                # Calculate which weeks this task spans
-                row = [task_name, owner]
+                # Create row with empty week cells
+                row = [task_name, owner] + [""] * total_weeks
+
+                # Track which weeks this task spans for coloring
                 for week_idx in range(total_weeks):
                     week_start = min_s + timedelta(days=week_idx * 7)
                     week_end = week_start + timedelta(days=6)
 
                     # Check if task overlaps with this week
                     if s <= week_end and e >= week_start:
-                        row.append("■")  # Blue bar placeholder
-                    else:
-                        row.append("")
+                        # Mark this cell for blue background (col = week_idx + 2 to account for Task and Owner columns)
+                        blue_cells.append((week_idx + 2, row_idx))
 
                 table_data.append(row)
 
             # Create table with styling
             col_widths = [180, 80] + [30] * total_weeks  # Task, Owner, then week columns
 
-            gantt_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-            gantt_table.setStyle(TableStyle([
+            # Build style list
+            style_commands = [
                 # Header row styling (green background)
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#70AD47")),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -605,19 +609,21 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
                 ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
                 ('FONTSIZE', (0, 1), (-1, -1), 8),
 
-                # Week columns (centered, blue for filled cells)
+                # Week columns (centered)
                 ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
-                ('TEXTCOLOR', (2, 1), (-1, -1), colors.HexColor("#4D96FF")),
-                ('FONTNAME', (2, 1), (-1, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (2, 1), (-1, -1), 12),
+                ('VALIGN', (2, 1), (-1, -1), 'MIDDLE'),
 
                 # Grid lines
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('BOX', (0, 0), (-1, -1), 1, colors.black),
+            ]
 
-                # Alternating row colors
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
-            ]))
+            # Add blue background for each cell that represents task duration
+            for col, row in blue_cells:
+                style_commands.append(('BACKGROUND', (col, row), (col, row), colors.HexColor("#4D96FF")))
+
+            gantt_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+            gantt_table.setStyle(TableStyle(style_commands))
 
             elems.append(Paragraph("<b>High-Level Project Plan</b>", styles["Heading2"]))
             elems.append(Spacer(1, 0.3 * cm))
