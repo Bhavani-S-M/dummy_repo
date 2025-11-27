@@ -559,9 +559,9 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
             min_s = min(s for _, s, _ in parsed)
             max_e = max(e for _, _, e in parsed)
 
-            # Calculate total weeks
-            total_days = max(1, (max_e - min_s).days)
-            total_weeks = (total_days // 7) + 1
+            # Calculate total weeks (project start to end, rounded up)
+            total_days = (max_e - min_s).days + 1  # Include end date
+            total_weeks = (total_days + 6) // 7  # Round up to nearest week
 
             # Build table data
             # Header row: Task | Owner | Week 1 | Week 2 | ...
@@ -573,60 +573,77 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
 
             # For each activity, create a row
             for row_idx, (a, s, e) in enumerate(parsed, start=1):
-                task_name = (a.get("Activities") or "")[:40]
+                task_name = (a.get("Activities") or "")[:35]  # Truncate to fit
                 owner = a.get("Owner") or "Unassigned"
 
                 # Create row with empty week cells
                 row = [task_name, owner] + [""] * total_weeks
 
-                # Track which weeks this task spans for coloring
+                # Calculate which weeks this task spans
                 for week_idx in range(total_weeks):
-                    week_start = min_s + timedelta(days=week_idx * 7)
-                    week_end = week_start + timedelta(days=6)
+                    # Week boundaries: Week 1 = day 0-6, Week 2 = day 7-13, etc.
+                    week_start_day = week_idx * 7
+                    week_end_day = week_start_day + 6
 
-                    # Check if task overlaps with this week
-                    if s <= week_end and e >= week_start:
-                        # Mark this cell for blue background (col = week_idx + 2 to account for Task and Owner columns)
-                        blue_cells.append((week_idx + 2, row_idx))
+                    week_start_date = min_s + timedelta(days=week_start_day)
+                    week_end_date = min_s + timedelta(days=week_end_day)
+
+                    # Check if task has any work during this week
+                    # Task overlaps if: task_start <= week_end AND task_end >= week_start
+                    if s <= week_end_date and e >= week_start_date:
+                        # Mark this cell for blue background
+                        col_idx = week_idx + 2  # +2 to account for Task and Owner columns
+                        blue_cells.append((col_idx, row_idx))
 
                 table_data.append(row)
 
-            # Create table with styling
-            col_widths = [180, 80] + [30] * total_weeks  # Task, Owner, then week columns
+            # Create table with fixed column widths
+            col_widths = [160, 70] + [25] * total_weeks
 
-            # Build style list
+            # Build style commands
             style_commands = [
                 # Header row styling (green background)
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#70AD47")),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('FONTSIZE', (0, 0), (-1, 0), 8),
                 ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
 
-                # Task and Owner columns (left-aligned)
-                ('ALIGN', (0, 1), (1, -1), 'LEFT'),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                # Task column (left-aligned)
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('VALIGN', (0, 1), (0, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 1), (0, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (0, -1), 7),
+                ('LEFTPADDING', (0, 1), (0, -1), 3),
+
+                # Owner column (left-aligned)
+                ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+                ('VALIGN', (1, 1), (1, -1), 'MIDDLE'),
+                ('FONTNAME', (1, 1), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (1, 1), (1, -1), 7),
 
                 # Week columns (centered)
                 ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
                 ('VALIGN', (2, 1), (-1, -1), 'MIDDLE'),
 
-                # Grid lines
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('BOX', (0, 0), (-1, -1), 1, colors.black),
+                # Grid lines (thicker for better visibility)
+                ('GRID', (0, 0), (-1, -1), 0.75, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 1.5, colors.black),
+
+                # Row height for proper spacing
+                ('ROWHEIGHT', (0, 0), (-1, -1), 18),
             ]
 
             # Add blue background for each cell that represents task duration
             for col, row in blue_cells:
-                style_commands.append(('BACKGROUND', (col, row), (col, row), colors.HexColor("#4D96FF")))
+                style_commands.append(('BACKGROUND', (col, row), (col, row), colors.HexColor("#4472C4")))
 
             gantt_table = Table(table_data, colWidths=col_widths, repeatRows=1)
             gantt_table.setStyle(TableStyle(style_commands))
 
             elems.append(Paragraph("<b>High-Level Project Plan</b>", styles["Heading2"]))
-            elems.append(Spacer(1, 0.3 * cm))
+            elems.append(Spacer(1, 0.2 * cm))
             elems.append(gantt_table)
             elems.append(Spacer(1, 0.6 * cm))
 
