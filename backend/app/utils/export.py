@@ -102,103 +102,96 @@ def generate_xlsx(scope: Dict[str, Any]) -> io.BytesIO:
         ws_ov.set_column("A:A", 20)
         ws_ov.set_column("B:B", 100)
 
-        # -------- Activities ----------
+        # -------- Activities (Week-based Gantt) ----------
         ws_a = wb.add_worksheet("Activities")
-        headers = [
-            "ID", "Activities", "Description", "Owner",
-            "Resources", "Start Date", "End Date", "Effort (months)", "DurationTemp"
-        ]
-        ws_a.write_row("A1", headers, fmt_th)
 
-        ws_a.set_column("A:A", 5)
-        ws_a.set_column("B:B", 25) 
-        ws_a.set_column("C:D", 30)  
-        ws_a.set_column("E:E", 20)  
-        ws_a.set_column("F:I", 15)   
-
+        # Parse activities and find project timeline
+        activities = data.get("activities", [])
+        parsed_activities = []
         starts, ends = [], []
-        for r, a in enumerate(data.get("activities", []), start=2):
-            zfmt = fmt_z1 if r % 2 else fmt_z2
-            ws_a.write(r-1, 0, a.get("ID"), zfmt)
-            ws_a.write(r-1, 1, a.get("Activities"), zfmt)
-            ws_a.write(r-1, 2, a.get("Description"), zfmt)
-            ws_a.write(r-1, 3, a.get("Owner"), zfmt)
-            ws_a.write(r-1, 4, a.get("Resources"), zfmt)
+
+        for a in activities:
             try:
                 s = datetime.fromisoformat(a["Start Date"])
-                ws_a.write_datetime(r-1, 5, s, fmt_date)
-                starts.append(s)
-            except:
-                ws_a.write_blank(r-1, 5, None, fmt_date)
-            try:
                 e = datetime.fromisoformat(a["End Date"])
-                ws_a.write_datetime(r-1, 6, e, fmt_date)
+                starts.append(s)
                 ends.append(e)
+                parsed_activities.append((a, s, e))
             except:
-                ws_a.write_blank(r-1, 6, None, fmt_date)
+                # Skip activities with invalid dates
+                pass
 
-        last_a = len(data.get("activities", [])) + 1
+        if parsed_activities and starts and ends:
+            # Calculate project start (earliest Monday on or before min start date)
+            min_start = min(starts)
+            max_end = max(ends)
 
-        # Column Formulas
-        if data.get("activities"):
-            ws_a.add_table(
-                f"A1:I{last_a}",
-                {
-                    "name": "ActivitiesTable",
-                    "columns": [
-                        {"header": h} if h not in ("Effort (months)", "DurationTemp") else (
-                            {
-                                "header": "Effort (months)",
-                                "formula": (
-                                    'IF(AND([@[Start Date]]<>"",[@[End Date]]<>""),'
-                                    '([@[End Date]]-[@[Start Date]])/30,"")'
-                                )
-                            } if h == "Effort (months)" else
-                            {
-                                "header": "DurationTemp",
-                                "formula": (
-                                    'IF(AND([@[Start Date]]<>"",[@[End Date]]<>""),'
-                                    '[@[End Date]]-[@[Start Date]],"")'
-                                ),
-                                "format": fmt_num
-                            }
-                        )
-                        for h in headers
-                    ],
-                    "style": "Table Style Medium 2",
-                    "autofilter": True
-                }
-            )
+            # Find the Monday of the week containing min_start
+            project_start = min_start - timedelta(days=min_start.weekday())
 
-            # ------- Gantt chart --------
-            if starts and ends:
-                gantt = wb.add_chart({"type": "bar", "subtype": "stacked"})
-                gantt.add_series({
-                    "name": "Start",
-                    "categories": f"='Activities'!$B$2:$B${last_a}",
-                    "values": f"='Activities'!$F$2:$F${last_a}",  
-                    "fill": {"none": True},
-                    "border": {"none": True}
-                })
-                gantt.add_series({
-                    "name": "Duration",
-                    "categories": f"='Activities'!$B$2:$B${last_a}", 
-                    "values": f"='Activities'!$I$2:$I${last_a}",  
-                    "fill": {"color": "#4D96FF"},
-                    "border": {"color": "#4D96FF"}
-                })
+            # Calculate total weeks needed (round up)
+            total_days = (max_end - project_start).days + 1
+            num_weeks = (total_days + 6) // 7  # Round up to nearest week
 
-                gantt.set_title({"name": "Project Gantt Chart"})
-                gantt.set_x_axis({
-                    "date_axis": True,
-                    "num_format": "mmm yyyy",
-                    "major_unit": 30,
-                    "major_unit_type": "days"
-                })
-                gantt.set_y_axis({"reverse": True})
-                gantt.set_legend({"none": True})
+            # Create headers: ID, Activities, Owner, Week 1, Week 2, ..., Week N
+            headers = ["ID", "Activities", "Owner"] + [f"Week {i+1}" for i in range(num_weeks)]
+            ws_a.write_row("A1", headers, fmt_th)
 
-                ws_a.insert_chart("K1", gantt, {"x_scale": 2.2, "y_scale": 1.6})
+            # Set column widths
+            ws_a.set_column("A:A", 5)   # ID
+            ws_a.set_column("B:B", 35)  # Activities
+            ws_a.set_column("C:C", 15)  # Owner
+            # Week columns - narrower to fit more weeks
+            for i in range(3, 3 + num_weeks):
+                ws_a.set_column(i, i, 6)
+
+            # Format for week cells with blue background (timeline bar)
+            fmt_week_bar = wb.add_format({
+                "bg_color": "#4D96FF",
+                "border": 1,
+                "align": "center"
+            })
+
+            # Format for empty week cells
+            fmt_week_empty = wb.add_format({
+                "border": 1,
+                "align": "center"
+            })
+
+            # Write each activity
+            for row_idx, (a, start_date, end_date) in enumerate(parsed_activities, start=2):
+                zfmt = fmt_z1 if row_idx % 2 else fmt_z2
+
+                # Write ID, Activities, Owner
+                ws_a.write(row_idx-1, 0, a.get("ID", row_idx-1), zfmt)
+                ws_a.write(row_idx-1, 1, a.get("Activities", ""), zfmt)
+                ws_a.write(row_idx-1, 2, a.get("Owner", ""), zfmt)
+
+                # Calculate which weeks this activity spans
+                activity_start_day = (start_date - project_start).days
+                activity_end_day = (end_date - project_start).days
+
+                # Calculate week indices (0-based)
+                start_week = activity_start_day // 7
+                end_week = activity_end_day // 7
+
+                # Fill in the week columns
+                for week_idx in range(num_weeks):
+                    col_idx = 3 + week_idx  # Week columns start at column 3 (0-indexed)
+
+                    if start_week <= week_idx <= end_week:
+                        # This week is part of the activity timeline
+                        ws_a.write(row_idx-1, col_idx, "", fmt_week_bar)
+                    else:
+                        # Empty week cell
+                        ws_a.write(row_idx-1, col_idx, "", fmt_week_empty)
+        else:
+            # Fallback if no valid activities with dates
+            headers = ["ID", "Activities", "Owner"]
+            ws_a.write_row("A1", headers, fmt_th)
+            ws_a.set_column("A:A", 5)
+            ws_a.set_column("B:B", 35)
+            ws_a.set_column("C:C", 15)
 
 
         # -------- Resources Plan --------
@@ -553,35 +546,62 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
         elems.append(t)
         elems.append(Spacer(1, 0.6 * cm))
 
-        # ----- Gantt chart -----
+        # ----- Week-based Timeline -----
         if parsed:
             parsed.sort(key=lambda x: x[1])
             batches = [parsed[i:i + 20] for i in range(0, len(parsed), 20)]
             for bi, batch in enumerate(batches, start=1):
                 min_s = min(s for _, s, _ in batch)
                 max_e = max(e for _, _, e in batch)
-                total_days = max(1, (max_e - min_s).days)
-                px_per_day = 620.0 / total_days
-                d = Drawing(780, (len(batch) * 20) + 80)
-                # Month grid
-                cur = datetime(min_s.year, min_s.month, 1)
-                while cur <= max_e:
-                    x = 80 + (cur - min_s).days * px_per_day
-                    d.add(Rect(x, 30, 0.5, len(batch) * 20 + 30,
+
+                # Calculate project start (Monday of first week)
+                project_start = min_s - timedelta(days=min_s.weekday())
+
+                # Calculate total weeks
+                total_days = (max_e - project_start).days + 1
+                num_weeks = (total_days + 6) // 7
+
+                # Width for each week column
+                week_width = 35
+                grid_width = num_weeks * week_width
+                total_width = 150 + grid_width
+
+                d = Drawing(total_width + 50, (len(batch) * 25) + 80)
+
+                # Week grid headers and lines
+                for week_idx in range(num_weeks):
+                    x = 150 + (week_idx * week_width)
+
+                    # Vertical grid line
+                    d.add(Rect(x, 30, 0.5, len(batch) * 25 + 30,
                                fillColor=colors.lightgrey, strokeColor=colors.lightgrey))
-                    d.add(String(x+2, 10, cur.strftime("%b %Y"),
-                                 fontSize=6, fillColor=colors.grey))
-                    cur = datetime(cur.year + (1 if cur.month == 12 else 0),
-                                   1 if cur.month == 12 else cur.month+1, 1)
-                # Bars
+
+                    # Week label
+                    d.add(String(x + 5, 10, f"W{week_idx + 1}",
+                                 fontSize=7, fillColor=colors.grey))
+
+                # Activity bars
                 for i, (a, s, e) in enumerate(batch):
-                    y = 50 + i * 20
-                    x = 80 + (s - min_s).days * px_per_day
-                    w = max(1, (e - s).days) * px_per_day
-                    label = (a["Activities"] or "")[:35]
-                    d.add(Rect(x, y, w, 10, fillColor=colors.HexColor("#4D96FF")))
-                    d.add(String(x+w+4, y+2, label, fontSize=8))
-                elems.append(Paragraph("<b>Project Timeline</b>", styles["Heading2"]))
+                    y = 50 + i * 25
+
+                    # Calculate week indices for this activity
+                    activity_start_day = (s - project_start).days
+                    activity_end_day = (e - project_start).days
+                    start_week = activity_start_day // 7
+                    end_week = activity_end_day // 7
+
+                    # Draw activity label
+                    label = (a["Activities"] or "")[:25]
+                    d.add(String(5, y+5, label, fontSize=8))
+
+                    # Draw blue bar across the weeks
+                    bar_x = 150 + (start_week * week_width)
+                    bar_width = ((end_week - start_week + 1) * week_width) - 2
+                    d.add(Rect(bar_x + 1, y + 3, bar_width, 12,
+                              fillColor=colors.HexColor("#4D96FF"),
+                              strokeColor=colors.HexColor("#3077DD")))
+
+                elems.append(Paragraph("<b>High Level Project Plan</b>", styles["Heading2"]))
                 elems.append(d)
                 elems.append(Spacer(1, 0.6 * cm))
                 if bi < len(batches):
