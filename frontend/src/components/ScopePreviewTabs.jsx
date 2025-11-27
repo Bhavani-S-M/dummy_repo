@@ -171,6 +171,68 @@ const ScopePreviewTabs = ({ activeTab, parsedDraft }) => {
       return <div className="text-gray-500 italic">No data available</div>;
     }
 
+    // Special rendering for summary/project summary - use table layout
+    if (activeTab === 'summary' && typeof data === 'object' && !Array.isArray(data)) {
+      return (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border border-gray-300 dark:border-gray-600">
+            <thead className="bg-gray-100 dark:bg-gray-700">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-300 dark:border-gray-600">
+                  Field
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-200 border-b border-gray-300 dark:border-gray-600">
+                  Details
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-dark-card divide-y divide-gray-200 dark:divide-gray-700">
+              {Object.entries(data).map(([key, value], idx) => {
+                if (value === null || value === undefined || value === '') return null;
+
+                let displayValue;
+                if (Array.isArray(value)) {
+                  displayValue = (
+                    <ul className="list-disc list-inside space-y-1">
+                      {value.map((item, itemIdx) => (
+                        <li key={itemIdx} className="text-gray-600 dark:text-gray-400">
+                          {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                } else if (typeof value === 'object') {
+                  displayValue = (
+                    <div className="space-y-1">
+                      {Object.entries(value).map(([subKey, subValue]) => (
+                        <div key={subKey}>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">{subKey.replace(/_/g, ' ')}: </span>
+                          <span className="text-gray-600 dark:text-gray-400">{String(subValue)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                } else {
+                  displayValue = <span className="text-gray-600 dark:text-gray-400">{String(value)}</span>;
+                }
+
+                return (
+                  <tr key={key} className={idx % 2 === 0 ? 'bg-white dark:bg-dark-card' : 'bg-gray-50 dark:bg-gray-800'}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 align-top w-1/4">
+                      {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 align-top">
+                      {displayValue}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     // Special rendering for cost projection - show total_cost prominently at the top
     if (activeTab === 'costing' && typeof data === 'object' && !Array.isArray(data)) {
       const formatCurrency = (amount) => {

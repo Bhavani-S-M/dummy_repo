@@ -279,6 +279,47 @@ def generate_xlsx(scope: Dict[str, Any]) -> io.BytesIO:
             pie.set_title({"name": "Cost by Role"})
             ws_r.insert_chart("M1", pie, {"x_scale": 1.5, "y_scale": 1.5})
 
+        # -------- Related Case Study --------
+        related_case_study = data.get("related_case_study")
+        ws_cs = wb.add_worksheet("Related Case Study")
+        ws_cs.set_column("A:A", 25)
+        ws_cs.set_column("B:B", 100)
+
+        title_format = wb.add_format({
+            "bold": True, "font_size": 14, "bg_color": THEME["header_bg"],
+            "border": 1, "align": "left"
+        })
+        ws_cs.merge_range("A1:B1", "Related Case Study", title_format)
+
+        row = 2
+        if related_case_study and isinstance(related_case_study, dict):
+            # Display case study details
+            for key in ["file_name", "similarity_score", "summary", "key_points"]:
+                if key in related_case_study:
+                    value = related_case_study[key]
+                    zfmt = fmt_z1 if row % 2 else fmt_z2
+
+                    if key == "similarity_score" and isinstance(value, (int, float)):
+                        value = f"{value:.2%}"
+                    elif key == "key_points" and isinstance(value, list):
+                        value = "\n".join([f"• {point}" for point in value])
+
+                    ws_cs.write(row, 0, key.replace("_", " ").title(), fmt_th)
+                    ws_cs.write(row, 1, str(value), wb.add_format({
+                        "border": 1, "text_wrap": True, "valign": "top"
+                    }))
+                    row += 1
+        elif related_case_study and isinstance(related_case_study, str):
+            ws_cs.write(row, 0, "Details", fmt_th)
+            ws_cs.write(row, 1, related_case_study, wb.add_format({
+                "border": 1, "text_wrap": True, "valign": "top"
+            }))
+        else:
+            ws_cs.write(row, 0, "Status", fmt_th)
+            ws_cs.write(row, 1, "No related case study found", wb.add_format({
+                "border": 1, "italic": True
+            }))
+
         # -------- Project Summary --------
         summary = data.get("project_summary", {})
         if summary and isinstance(summary, dict):
@@ -337,10 +378,36 @@ def generate_xlsx(scope: Dict[str, Any]) -> io.BytesIO:
                 row += 1
 
                 for risk_item in risks:
+                    risk_text = ""
+                    mitigation_text = ""
+
                     if isinstance(risk_item, dict):
+                        # Dictionary format: {"risk": "...", "mitigation": "..."}
+                        risk_text = risk_item.get("risk", "")
+                        mitigation_text = risk_item.get("mitigation", "")
+                    elif isinstance(risk_item, str):
+                        # String format: "Risk: ... Mitigation: ..."
+                        if "Mitigation:" in risk_item or "mitigation:" in risk_item:
+                            parts = risk_item.split("Mitigation:", 1) if "Mitigation:" in risk_item else risk_item.split("mitigation:", 1)
+                            risk_part = parts[0].strip()
+                            mitigation_part = parts[1].strip() if len(parts) > 1 else ""
+
+                            # Remove "Risk:" prefix if present
+                            if risk_part.startswith("Risk:"):
+                                risk_part = risk_part[5:].strip()
+                            elif risk_part.startswith("risk:"):
+                                risk_part = risk_part[5:].strip()
+
+                            risk_text = risk_part
+                            mitigation_text = mitigation_part
+                        else:
+                            # No clear separation, put entire text in risk column
+                            risk_text = risk_item
+
+                    if risk_text:  # Only add row if there's content
                         zfmt = fmt_z1 if row % 2 else fmt_z2
-                        ws_s.write(row, 0, risk_item.get("risk", ""), zfmt)
-                        ws_s.write(row, 1, risk_item.get("mitigation", ""), zfmt)
+                        ws_s.write(row, 0, risk_text, zfmt)
+                        ws_s.write(row, 1, mitigation_text, zfmt)
                         row += 1
 
         wb.close()
@@ -546,66 +613,87 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
         elems.append(t)
         elems.append(Spacer(1, 0.6 * cm))
 
-        # ----- Week-based Timeline -----
+        # ----- Week-based Gantt Table -----
         if parsed:
             parsed.sort(key=lambda x: x[1])
-            batches = [parsed[i:i + 20] for i in range(0, len(parsed), 20)]
-            for bi, batch in enumerate(batches, start=1):
-                min_s = min(s for _, s, _ in batch)
-                max_e = max(e for _, _, e in batch)
 
-                # Calculate project start (Monday of first week)
-                project_start = min_s - timedelta(days=min_s.weekday())
+            # Calculate project start (Monday of first week)
+            min_s = min(s for _, s, _ in parsed)
+            max_e = max(e for _, _, e in parsed)
+            project_start = min_s - timedelta(days=min_s.weekday())
 
-                # Calculate total weeks
-                total_days = (max_e - project_start).days + 1
-                num_weeks = (total_days + 6) // 7
+            # Calculate total weeks
+            total_days = (max_e - project_start).days + 1
+            num_weeks = (total_days + 6) // 7
 
-                # Width for each week column
-                week_width = 35
-                grid_width = num_weeks * week_width
-                total_width = 150 + grid_width
+            # Build table headers: Task | Owner | Week 1 | Week 2 | ...
+            gantt_headers = ["Task", "Owner"] + [f"Week {i+1}" for i in range(num_weeks)]
+            gantt_rows = [gantt_headers]
 
-                d = Drawing(total_width + 50, (len(batch) * 25) + 80)
+            # Build each activity row
+            for a, s, e in parsed:
+                # Calculate week indices for this activity
+                activity_start_day = (s - project_start).days
+                activity_end_day = (e - project_start).days
+                start_week = activity_start_day // 7
+                end_week = activity_end_day // 7
 
-                # Week grid headers and lines
+                # Create row with task and owner
+                row = [
+                    Paragraph(a.get("Activities", "")[:40], wrap),
+                    Paragraph(a.get("Owner", ""), wrap)
+                ]
+
+                # Add week cells - empty string for weeks in range, blank for others
                 for week_idx in range(num_weeks):
-                    x = 150 + (week_idx * week_width)
+                    row.append("")  # All cells get empty string, color comes from style
 
-                    # Vertical grid line
-                    d.add(Rect(x, 30, 0.5, len(batch) * 25 + 30,
-                               fillColor=colors.lightgrey, strokeColor=colors.lightgrey))
+                gantt_rows.append(row)
 
-                    # Week label
-                    d.add(String(x + 5, 10, f"W{week_idx + 1}",
-                                 fontSize=7, fillColor=colors.grey))
+            # Calculate column widths: Task (wider), Owner, then weeks
+            col_widths = [150, 60] + [25] * num_weeks
 
-                # Activity bars
-                for i, (a, s, e) in enumerate(batch):
-                    y = 50 + i * 25
+            # Create table
+            gantt_table = LongTable(gantt_rows, repeatRows=1, colWidths=col_widths)
 
-                    # Calculate week indices for this activity
-                    activity_start_day = (s - project_start).days
-                    activity_end_day = (e - project_start).days
-                    start_week = activity_start_day // 7
-                    end_week = activity_end_day // 7
+            # Build table style
+            ts_gantt = TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(THEME["header_bg"])),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (2, 0), (-1, -1), "CENTER"),  # Center week columns
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ])
 
-                    # Draw activity label
-                    label = (a["Activities"] or "")[:25]
-                    d.add(String(5, y+5, label, fontSize=8))
+            # Add zebra striping and blue backgrounds for active weeks
+            for row_idx, (a, s, e) in enumerate(parsed, start=1):
+                # Zebra striping for Task and Owner columns
+                bg_color = colors.HexColor(THEME["zebra1" if row_idx % 2 else "zebra2"])
+                ts_gantt.add("BACKGROUND", (0, row_idx), (1, row_idx), bg_color)
 
-                    # Draw blue bar across the weeks
-                    bar_x = 150 + (start_week * week_width)
-                    bar_width = ((end_week - start_week + 1) * week_width) - 2
-                    d.add(Rect(bar_x + 1, y + 3, bar_width, 12,
-                              fillColor=colors.HexColor("#4D96FF"),
-                              strokeColor=colors.HexColor("#3077DD")))
+                # Calculate which weeks are active for this activity
+                activity_start_day = (s - project_start).days
+                activity_end_day = (e - project_start).days
+                start_week = activity_start_day // 7
+                end_week = activity_end_day // 7
 
-                elems.append(Paragraph("<b>High Level Project Plan</b>", styles["Heading2"]))
-                elems.append(d)
-                elems.append(Spacer(1, 0.6 * cm))
-                if bi < len(batches):
-                    elems.append(PageBreak())
+                # Color week cells - blue for active weeks, zebra for inactive
+                for week_idx in range(num_weeks):
+                    col_idx = 2 + week_idx  # Week columns start at index 2
+                    if start_week <= week_idx <= end_week:
+                        ts_gantt.add("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx),
+                                   colors.HexColor("#4D96FF"))
+                    else:
+                        ts_gantt.add("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), bg_color)
+
+            gantt_table.setStyle(ts_gantt)
+            gantt_table.hAlign = "LEFT"
+
+            elems.append(Paragraph("<b>High Level Project Plan</b>", styles["Heading2"]))
+            elems.append(gantt_table)
+            elems.append(Spacer(1, 0.6 * cm))
 
     # -------- Resourcing Plan --------
     plan = data.get("resourcing_plan", [])
@@ -713,6 +801,46 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
             elems.append(Spacer(1, 0.6 * cm))
             elems.append(d2)
 
+    # -------- Related Case Study --------
+    related_case_study = data.get("related_case_study")
+    if related_case_study or True:  # Always show this section
+        elems.append(PageBreak())
+        elems.append(Paragraph("<b>Related Case Study</b>", styles["Heading2"]))
+        elems.append(Spacer(1, 0.4 * cm))
+
+        if related_case_study and isinstance(related_case_study, dict):
+            # Display case study details
+            if related_case_study.get("file_name"):
+                elems.append(Paragraph(f"<b>Document:</b> {related_case_study['file_name']}", wrap))
+                elems.append(Spacer(1, 0.2 * cm))
+
+            if related_case_study.get("similarity_score"):
+                score = related_case_study["similarity_score"]
+                elems.append(Paragraph(f"<b>Similarity Score:</b> {score:.2%}", wrap))
+                elems.append(Spacer(1, 0.2 * cm))
+
+            if related_case_study.get("summary"):
+                elems.append(Paragraph(f"<b>Summary:</b>", wrap))
+                elems.append(Paragraph(related_case_study["summary"], wrap))
+                elems.append(Spacer(1, 0.2 * cm))
+
+            if related_case_study.get("key_points"):
+                elems.append(Paragraph(f"<b>Key Points:</b>", wrap))
+                for point in related_case_study["key_points"]:
+                    elems.append(Paragraph(f"• {point}", wrap))
+                elems.append(Spacer(1, 0.2 * cm))
+        elif related_case_study and isinstance(related_case_study, str):
+            # Simple string format
+            elems.append(Paragraph(related_case_study, wrap))
+        else:
+            # No case study found
+            elems.append(Paragraph(
+                "<i>No related case study found</i>",
+                wrap
+            ))
+
+        elems.append(Spacer(1, 0.6 * cm))
+
     # -------- Project Summary --------
     summary = data.get("project_summary", {})
     logger.info(f"📋 Project summary in scope data: {bool(summary)} (keys: {list(summary.keys()) if summary else 'None'})")
@@ -750,11 +878,39 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
         if risks and isinstance(risks, list):
             elems.append(Paragraph("<b>Risks and Mitigation Strategies</b>", styles["Heading2"]))
             risk_rows = [["Risk", "Mitigation Strategy"]]
+
             for risk_item in risks:
+                risk_text = ""
+                mitigation_text = ""
+
                 if isinstance(risk_item, dict):
+                    # Dictionary format: {"risk": "...", "mitigation": "..."}
+                    risk_text = risk_item.get("risk", "")
+                    mitigation_text = risk_item.get("mitigation", "")
+                elif isinstance(risk_item, str):
+                    # String format: "Risk: ... Mitigation: ..."
+                    # Try to split by various patterns
+                    if "Mitigation:" in risk_item or "mitigation:" in risk_item:
+                        parts = risk_item.split("Mitigation:", 1) if "Mitigation:" in risk_item else risk_item.split("mitigation:", 1)
+                        risk_part = parts[0].strip()
+                        mitigation_part = parts[1].strip() if len(parts) > 1 else ""
+
+                        # Remove "Risk:" prefix if present
+                        if risk_part.startswith("Risk:"):
+                            risk_part = risk_part[5:].strip()
+                        elif risk_part.startswith("risk:"):
+                            risk_part = risk_part[5:].strip()
+
+                        risk_text = risk_part
+                        mitigation_text = mitigation_part
+                    else:
+                        # No clear separation, put entire text in risk column
+                        risk_text = risk_item
+
+                if risk_text:  # Only add row if there's content
                     risk_rows.append([
-                        Paragraph(risk_item.get("risk", ""), wrap),
-                        Paragraph(risk_item.get("mitigation", ""), wrap)
+                        Paragraph(risk_text, wrap),
+                        Paragraph(mitigation_text, wrap)
                     ])
 
             if len(risk_rows) > 1:  # Only add table if there are risks

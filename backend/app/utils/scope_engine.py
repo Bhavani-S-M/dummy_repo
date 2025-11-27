@@ -25,6 +25,16 @@ from app.utils.ai_clients import (
 
 logger = logging.getLogger(__name__)
 
+
+# Helper function to round effort months to nearest 0.5
+def round_to_half(value: float) -> float:
+    """
+    Round a number to the nearest 0.5 increment.
+    Examples: 1.3 → 1.5, 3.8 → 4.0, 4.1 → 4.0, 2.26 → 2.5
+    """
+    return round(value * 2) / 2
+
+
 # Init AI services
 llm_cfg = get_llm_client()
 embed_cfg = get_embed_client()
@@ -1585,10 +1595,10 @@ async def clean_scope(db: AsyncSession, data: Dict[str, Any], project=None) -> D
             "Activities": _safe_str(a.get("Activities")),
             "Description": _safe_str(a.get("Description")),
             "Owner": owner,
-            "Resources": ", ".join(raw_deps), 
+            "Resources": ", ".join(raw_deps),
             "Start Date": s,
             "End Date": e,
-            "Effort Months": round(dur_days / 30.0, 2),
+            "Effort Months": round_to_half(dur_days / 30.0),
         })
 
         start_dates.append(s)
