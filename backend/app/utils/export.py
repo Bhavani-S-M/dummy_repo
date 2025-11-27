@@ -553,39 +553,76 @@ async def generate_pdf(scope: Dict[str, Any]) -> io.BytesIO:
         elems.append(t)
         elems.append(Spacer(1, 0.6 * cm))
 
-        # ----- Gantt chart -----
+        # ----- Gantt chart (Weekly Project Plan Table) -----
         if parsed:
             parsed.sort(key=lambda x: x[1])
-            batches = [parsed[i:i + 20] for i in range(0, len(parsed), 20)]
-            for bi, batch in enumerate(batches, start=1):
-                min_s = min(s for _, s, _ in batch)
-                max_e = max(e for _, _, e in batch)
-                total_days = max(1, (max_e - min_s).days)
-                px_per_day = 620.0 / total_days
-                d = Drawing(780, (len(batch) * 20) + 80)
-                # Month grid
-                cur = datetime(min_s.year, min_s.month, 1)
-                while cur <= max_e:
-                    x = 80 + (cur - min_s).days * px_per_day
-                    d.add(Rect(x, 30, 0.5, len(batch) * 20 + 30,
-                               fillColor=colors.lightgrey, strokeColor=colors.lightgrey))
-                    d.add(String(x+2, 10, cur.strftime("%b %Y"),
-                                 fontSize=6, fillColor=colors.grey))
-                    cur = datetime(cur.year + (1 if cur.month == 12 else 0),
-                                   1 if cur.month == 12 else cur.month+1, 1)
-                # Bars
-                for i, (a, s, e) in enumerate(batch):
-                    y = 50 + i * 20
-                    x = 80 + (s - min_s).days * px_per_day
-                    w = max(1, (e - s).days) * px_per_day
-                    label = (a["Activities"] or "")[:35]
-                    d.add(Rect(x, y, w, 10, fillColor=colors.HexColor("#4D96FF")))
-                    d.add(String(x+w+4, y+2, label, fontSize=8))
-                elems.append(Paragraph("<b>Project Timeline</b>", styles["Heading2"]))
-                elems.append(d)
-                elems.append(Spacer(1, 0.6 * cm))
-                if bi < len(batches):
-                    elems.append(PageBreak())
+            min_s = min(s for _, s, _ in parsed)
+            max_e = max(e for _, _, e in parsed)
+
+            # Calculate total weeks
+            total_days = max(1, (max_e - min_s).days)
+            total_weeks = (total_days // 7) + 1
+
+            # Build table data
+            # Header row: Task | Owner | Week 1 | Week 2 | ...
+            header = ["Task", "Owner"] + [f"Week {i+1}" for i in range(total_weeks)]
+            table_data = [header]
+
+            # For each activity, create a row
+            for a, s, e in parsed:
+                task_name = (a.get("Activities") or "")[:40]
+                owner = a.get("Owner") or "Unassigned"
+
+                # Calculate which weeks this task spans
+                row = [task_name, owner]
+                for week_idx in range(total_weeks):
+                    week_start = min_s + timedelta(days=week_idx * 7)
+                    week_end = week_start + timedelta(days=6)
+
+                    # Check if task overlaps with this week
+                    if s <= week_end and e >= week_start:
+                        row.append("■")  # Blue bar placeholder
+                    else:
+                        row.append("")
+
+                table_data.append(row)
+
+            # Create table with styling
+            col_widths = [180, 80] + [30] * total_weeks  # Task, Owner, then week columns
+
+            gantt_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+            gantt_table.setStyle(TableStyle([
+                # Header row styling (green background)
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#70AD47")),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+
+                # Task and Owner columns (left-aligned)
+                ('ALIGN', (0, 1), (1, -1), 'LEFT'),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+
+                # Week columns (centered, blue for filled cells)
+                ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+                ('TEXTCOLOR', (2, 1), (-1, -1), colors.HexColor("#4D96FF")),
+                ('FONTNAME', (2, 1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (2, 1), (-1, -1), 12),
+
+                # Grid lines
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 1, colors.black),
+
+                # Alternating row colors
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F2F2F2")]),
+            ]))
+
+            elems.append(Paragraph("<b>High-Level Project Plan</b>", styles["Heading2"]))
+            elems.append(Spacer(1, 0.3 * cm))
+            elems.append(gantt_table)
+            elems.append(Spacer(1, 0.6 * cm))
 
     # -------- Resourcing Plan --------
     plan = data.get("resourcing_plan", [])
